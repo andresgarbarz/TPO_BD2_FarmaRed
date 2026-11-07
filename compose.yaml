@@ -1,0 +1,26 @@
+services:
+  mongo:
+    image: mongo:8.3.11
+    container_name: farmared-mongo
+    environment:
+      # Mongo 8.3.11 trae rseq=0. En kernels 6.19 a 7.0.13, como el de Docker
+      # Desktop para Mac, el proceso se corta al iniciar si glibc también usa
+      # rseq. Con rseq=1 glibc se queda el registro y TCMalloc no lo usa.
+      # Queda un aviso de rendimiento en el log. En Codespaces, con kernel 6.8,
+      # arranca igual sin la variable; se deja fija para que este archivo sirva
+      # en todas las máquinas.
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
+    ports:
+      - "127.0.0.1:27017:27017"
+
+  neo4j:
+    image: neo4j:5.26.32
+    container_name: farmared-neo4j
+    environment:
+      NEO4J_AUTH: none
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"

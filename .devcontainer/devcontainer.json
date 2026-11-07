@@ -1,7 +1,15 @@
 {
   "name": "FarmaRed",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
-  "postCreateCommand": "python scripts/verificar_datasets.py",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "containerEnv": {
+    "MONGO_URI": "mongodb://127.0.0.1:27017",
+    "NEO4J_URI": "bolt://127.0.0.1:7687"
+  },
+  "forwardPorts": [27017, 7474, 7687],
+  "postCreateCommand": "pip install --disable-pip-version-check -r requirements.txt && docker compose up -d && python scripts/verificar_datasets.py",
   "customizations": {
     "vscode": {
       "extensions": ["ms-python.python"]
