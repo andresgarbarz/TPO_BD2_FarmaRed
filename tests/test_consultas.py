@@ -36,9 +36,9 @@ class ConsultasMongo(unittest.TestCase):
         cargar._validar(cls.tablas)
 
     def setUp(self):
-        for modulo in (cargar, q01, q07, q08, q09, q15, reglas):
+        for modulo in (cargar, q01, q05, q07, q08, q09, q15, reglas):
             self.enterContext(patch.object(modulo, "base", return_value=self.db))
-        for modulo in (q15,):
+        for modulo in (q05, q15):
             self.enterContext(patch.object(modulo, "hoy", return_value=HOY))
         self.cargar()
 
@@ -136,7 +136,23 @@ class ConsultasMongo(unittest.TestCase):
         self.assertEqual(q07.ejecutar(), [{
             "id_producto": "PRD012", "nombre": "Alcohol en gel 250ml", "unidades_vendidas": 3}])
 
+    def test_q05_dataset(self):
+        self.assertEqual({f["id_farmaceutico"]: f["cantidad_ventas"] for f in q05.ejecutar()},
+                         {"F001": 1, "F002": 2, "F003": 1, "F005": 3, "F006": 1, "F007": 0})
 
+    def test_q05_fechas_estados_ceros_y_conteo_de_ventas(self):
+        self.db.ventas.delete_many({})
+        self.venta("VX01", fecha=HOY - timedelta(days=60))
+        self.venta("VX02", fecha=HOY - timedelta(days=61))
+        self.venta("VX03", fecha=HOY + timedelta(hours=23, minutes=59))
+        self.venta("VX04", fecha=HOY + timedelta(days=1))
+        self.venta("VX05", estado="Anulada")
+        self.venta("VX06", estado="Pendiente", items=[
+            {"id_detalle": "DX1", "id_producto": "PRD001", "cantidad": 2, "precio_unit": 10},
+            {"id_detalle": "DX2", "id_producto": "PRD002", "cantidad": 3, "precio_unit": 10}])
+        self.venta("VX07", id_farmaceutico="F004")
+        self.assertEqual({f["id_farmaceutico"]: f["cantidad_ventas"] for f in q05.ejecutar()},
+                         {"F001": 3, "F002": 0, "F003": 0, "F005": 0, "F006": 0, "F007": 0})
 
 
 
