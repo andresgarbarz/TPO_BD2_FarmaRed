@@ -36,7 +36,7 @@ class ConsultasMongo(unittest.TestCase):
         cargar._validar(cls.tablas)
 
     def setUp(self):
-        for modulo in (cargar, q01, q09, q15, reglas):
+        for modulo in (cargar, q01, q08, q09, q15, reglas):
             self.enterContext(patch.object(modulo, "base", return_value=self.db))
         for modulo in (q15,):
             self.enterContext(patch.object(modulo, "hoy", return_value=HOY))
@@ -90,7 +90,24 @@ class ConsultasMongo(unittest.TestCase):
         self.assertFalse(resultado[0]["proveedor"]["activo"])
         self.assertNotIn("PRD002", [p["_id"] for p in resultado])
 
+    def test_q08_dataset_y_referencias(self):
+        resultado = q08.ejecutar()
+        self.assertEqual([l["_id"] for l in resultado],
+                         ["L002", "L003", "L005", "L007", "L010", "L011", "L012", "L014", "L018"])
+        for lote in resultado:
+            self.assertEqual(lote["producto"]["_id"], lote["id_producto"])
+            self.assertEqual(lote["sucursal"]["_id"], lote["id_sucursal"])
+            self.assertEqual(lote["proveedor"]["_id"], lote["producto"]["id_proveedor"])
 
+    def test_q08_limite_cero_drogueria_y_vencidos(self):
+        for identificador, unidades in (("L001", 50), ("L004", 0), ("L016", 49)):
+            self.db.stock_lotes.update_one({"_id": identificador}, {"$set": {"unidades": unidades}})
+        resultado = {l["_id"]: l for l in q08.ejecutar()}
+        self.assertNotIn("L001", resultado)
+        self.assertEqual(resultado["L004"]["unidades"], 0)
+        self.assertEqual(resultado["L016"]["sucursal"]["tipo"], "Droguería")
+        self.assertLess(resultado["L018"]["vencimiento"], HOY)
+        self.assertFalse(resultado["L018"]["producto"]["activo"])
 
 
 
