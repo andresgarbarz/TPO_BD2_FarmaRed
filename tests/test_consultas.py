@@ -36,7 +36,7 @@ class ConsultasMongo(unittest.TestCase):
         cargar._validar(cls.tablas)
 
     def setUp(self):
-        for modulo in (cargar, q09, q15, reglas):
+        for modulo in (cargar, q01, q09, q15, reglas):
             self.enterContext(patch.object(modulo, "base", return_value=self.db))
         for modulo in (q15,):
             self.enterContext(patch.object(modulo, "hoy", return_value=HOY))
@@ -72,7 +72,23 @@ class ConsultasMongo(unittest.TestCase):
         self.assertEqual([v["_id"] for v in resultado], ["V013", "V014", "VX01"])
         self.assertEqual(resultado[-1]["items"][0]["precio_unit"], 4999)
 
+    def test_q01_dataset_y_proveedor_completo(self):
+        resultado = q01.ejecutar()
+        self.assertEqual([p["_id"] for p in resultado],
+                         [f"PRD{i:03d}" for i in range(1, 12)])
+        for producto in resultado:
+            self.assertEqual(producto["proveedor"], self.db.proveedores.find_one(
+                {"_id": producto["id_proveedor"]}))
 
+    def test_q01_proveedor_inactivo_y_producto_inactivo(self):
+        self.db.productos.update_one({"_id": "PRD001"}, {"$set": {"id_proveedor": "PRV005"}})
+        self.db.productos.update_one({"_id": "PRD002"}, {"$set": {"activo": False}})
+        resultado = q01.ejecutar()
+        self.assertEqual(len(resultado), 10)
+        self.assertEqual(len({p["_id"] for p in resultado}), 10)
+        self.assertEqual(resultado[0]["_id"], "PRD001")
+        self.assertFalse(resultado[0]["proveedor"]["activo"])
+        self.assertNotIn("PRD002", [p["_id"] for p in resultado])
 
 
 
