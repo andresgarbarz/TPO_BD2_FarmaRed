@@ -36,9 +36,9 @@ class ConsultasMongo(unittest.TestCase):
         cargar._validar(cls.tablas)
 
     def setUp(self):
-        for modulo in (cargar, q01, q05, q07, q08, q09, q15, reglas):
+        for modulo in (cargar, q01, q05, q07, q08, q09, q11, q15, reglas):
             self.enterContext(patch.object(modulo, "base", return_value=self.db))
-        for modulo in (q05, q15):
+        for modulo in (q05, q11, q15):
             self.enterContext(patch.object(modulo, "hoy", return_value=HOY))
         self.cargar()
 
@@ -154,10 +154,63 @@ class ConsultasMongo(unittest.TestCase):
         self.assertEqual({f["id_farmaceutico"]: f["cantidad_ventas"] for f in q05.ejecutar()},
                          {"F001": 3, "F002": 0, "F003": 0, "F005": 0, "F006": 0, "F007": 0})
 
+    def test_q11_dataset_mes_vacio_y_octubre(self):
+        self.assertEqual(q11.ejecutar(), [])
+        with patch.object(q11, "hoy", return_value=datetime(2026, 10, 13)):
+            resultado = q11.ejecutar()
+        self.assertEqual({f["id_farmaceutico"]: f["ingresos_totales"] for f in resultado},
+                         {"F001": 4400, "F002": 7800, "F003": 7100, "F005": 4600})
+        for fila in resultado:
+            self.assertEqual((fila["anio"], fila["mes"]), (2026, 10))
+            self.assertEqual(fila["matricula"], self.db.farmaceuticos.find_one(
+                {"_id": fila["id_farmaceutico"]})["matricula"])
 
+    def test_q11_periodo_estados_y_farmaceutico_inactivo(self):
+        self.db.ventas.delete_many({})
+        self.venta("VX01", fecha=datetime(2026, 10, 31), total=1000)
+        self.venta("VX02", fecha=datetime(2026, 11, 1), total=300, id_farmaceutico="F004")
+        self.venta("VX03", fecha=datetime(2026, 11, 30), total=200)
+        self.venta("VX04", fecha=datetime(2026, 12, 1), total=1000)
+        self.venta("VX05", fecha=datetime(2025, 11, 10), total=1000)
+        self.venta("VX06", estado="Pendiente", total=1000)
+        self.venta("VX07", estado="Anulada", total=1000)
+        self.assertEqual({f["id_farmaceutico"]: f["ingresos_totales"] for f in q11.ejecutar()},
+                         {"F001": 200, "F004": 300})
 
+    def test_q11_cambio_de_anio_sin_recrear_vista(self):
+        self.db.ventas.delete_many({})
+        self.venta("VX01", fecha=datetime(2026, 12, 31), total=200)
+        self.venta("VX02", fecha=datetime(2027, 1, 1), total=300)
+        self.venta("VX03", fecha=datetime(2026, 1, 1), total=400)
+        for fecha, esperado in ((datetime(2026, 12, 31), 200), (datetime(2027, 1, 1), 300)):
+            with self.subTest(fecha=fecha), patch.object(q11, "hoy", return_value=fecha):
+                self.assertEqual([f["ingresos_totales"] for f in q11.ejecutar()], [esperado])
 
+    def test_carga_y_vista_repetibles(self):
+        self.cargar()
+        self.assertEqual({nombre: self.db[nombre].count_documents({}) for nombre in db.COLECCIONES},
+                         {"clientes": 8, "sucursales": 5, "farmaceuticos": 7, "proveedores": 5,
+                          "productos": 13, "stock_lotes": 18, "recetas": 9, "ventas": 16})
+        self.db.command("collMod", q11.VISTA, viewOn="ventas", pipeline=[])
+        q11.crear_vista()
+        self.assertEqual(q11.ejecutar(), [])
+        with patch.object(q11, "hoy", return_value=datetime(2026, 10, 13)):
+            self.assertEqual({f["id_farmaceutico"]: f["ingresos_totales"] for f in q11.ejecutar()},
+                             {"F001": 4400, "F002": 7800, "F003": 7100, "F005": 4600})
+        vista = next(self.db.list_collections(filter={"name": q11.VISTA}))
+        self.assertEqual(vista["type"], "view")
+        self.assertEqual(vista["options"]["viewOn"], "ventas")
 
+    def test_q11_refleja_q15_sin_recrear_vista(self):
+        self.assertEqual(q11.ejecutar(), [])
+        respuesta = q15.ejecutar("V011")
+        self.assertTrue(respuesta["ok"], respuesta)
+        self.assertEqual(respuesta["documento"]["fecha"], HOY)
+        self.assertEqual(respuesta["documento"]["fecha_registro"], datetime(2026, 10, 12))
+        self.assertEqual({f["id_farmaceutico"]: f["ingresos_totales"] for f in q11.ejecutar()},
+                         {"F006": 4800})
+        self.assertFalse(q15.ejecutar("V011")["ok"])
+        self.assertEqual(q11.ejecutar()[0]["ingresos_totales"], 4800)
 
 
 if __name__ == "__main__":
