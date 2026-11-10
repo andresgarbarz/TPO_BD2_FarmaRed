@@ -36,7 +36,7 @@ class ConsultasMongo(unittest.TestCase):
         cargar._validar(cls.tablas)
 
     def setUp(self):
-        for modulo in (cargar, q01, q08, q09, q15, reglas):
+        for modulo in (cargar, q01, q07, q08, q09, q15, reglas):
             self.enterContext(patch.object(modulo, "base", return_value=self.db))
         for modulo in (q15,):
             self.enterContext(patch.object(modulo, "hoy", return_value=HOY))
@@ -109,8 +109,32 @@ class ConsultasMongo(unittest.TestCase):
         self.assertLess(resultado["L018"]["vencimiento"], HOY)
         self.assertFalse(resultado["L018"]["producto"]["activo"])
 
+    def test_q07_dataset(self):
+        self.assertEqual([(p["id_producto"], p["unidades_vendidas"]) for p in q07.ejecutar()],
+                         [("PRD005", 6), ("PRD011", 5), ("PRD001", 4), ("PRD004", 3), ("PRD009", 2)])
 
+    def test_q07_empate_lineas_repetidas_y_estados(self):
+        self.db.ventas.delete_many({})
+        items = [{"id_detalle": f"DX{i}", "id_producto": f"PRD{i:03d}",
+                  "cantidad": 2, "precio_unit": 100} for i in range(2, 7)]
+        items.extend([
+            {"id_detalle": "DX7", "id_producto": "PRD001", "cantidad": 1, "precio_unit": 100},
+            {"id_detalle": "DX8", "id_producto": "PRD001", "cantidad": 1, "precio_unit": 100},
+        ])
+        self.venta("VX01", items=items)
+        for estado in ("Pendiente", "Anulada"):
+            self.venta(f"VX_{estado}", estado=estado, items=[
+                {"id_detalle": f"DX_{estado}", "id_producto": "PRD006", "cantidad": 1000, "precio_unit": 1}])
+        self.assertEqual([(p["id_producto"], p["unidades_vendidas"]) for p in q07.ejecutar()],
+                         [(f"PRD{i:03d}", 2) for i in range(1, 6)])
 
+    def test_q07_vacio_y_producto_inactivo(self):
+        self.db.ventas.delete_many({})
+        self.assertEqual(q07.ejecutar(), [])
+        self.venta("VX01", items=[
+            {"id_detalle": "DX1", "id_producto": "PRD012", "cantidad": 3, "precio_unit": 1800}])
+        self.assertEqual(q07.ejecutar(), [{
+            "id_producto": "PRD012", "nombre": "Alcohol en gel 250ml", "unidades_vendidas": 3}])
 
 
 
