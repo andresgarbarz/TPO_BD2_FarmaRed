@@ -5,7 +5,7 @@ Sin parámetros de entrada.
 Motor: MongoDB.
 Retorna id_farmaceutico, nombre, apellido, matricula y cantidad_ventas,
 ordenados por id. Incluye pendientes y farmacéuticos sin ventas.
-Convención: fecha desde hoy() - 60 días inclusive hasta mañana exclusivo.
+Convención: 60 días incluyendo hoy, desde hoy() - 59 días hasta mañana exclusivo.
 [P18, p. 6; T14, p. 23; T15, p. 33]
 """
 
@@ -28,7 +28,7 @@ def ejecutar() -> list[dict]:
             "pipeline": [
                 {"$match": {
                     "estado": {"$ne": "Anulada"},
-                    "fecha": {"$gte": fecha - timedelta(days=60),
+                    "fecha": {"$gte": fecha - timedelta(days=59),
                               "$lt": fecha + timedelta(days=1)},
                 }},
                 {"$count": "cantidad"},

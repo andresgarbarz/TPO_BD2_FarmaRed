@@ -142,8 +142,8 @@ class ConsultasMongo(unittest.TestCase):
 
     def test_q05_fechas_estados_ceros_y_conteo_de_ventas(self):
         self.db.ventas.delete_many({})
-        self.venta("VX01", fecha=HOY - timedelta(days=60))
-        self.venta("VX02", fecha=HOY - timedelta(days=61))
+        self.venta("VX01", fecha=HOY - timedelta(days=59))
+        self.venta("VX02", fecha=HOY - timedelta(days=60))
         self.venta("VX03", fecha=HOY + timedelta(hours=23, minutes=59))
         self.venta("VX04", fecha=HOY + timedelta(days=1))
         self.venta("VX05", estado="Anulada")
@@ -153,6 +153,13 @@ class ConsultasMongo(unittest.TestCase):
         self.venta("VX07", id_farmaceutico="F004")
         self.assertEqual({f["id_farmaceutico"]: f["cantidad_ventas"] for f in q05.ejecutar()},
                          {"F001": 3, "F002": 0, "F003": 0, "F005": 0, "F006": 0, "F007": 0})
+
+    def test_q05_ventana_exacta_60_dias(self):
+        self.db.ventas.delete_many({})
+        for dias in range(61):
+            self.venta(f"VX{dias:03d}", fecha=HOY - timedelta(days=dias))
+        resultado = {f["id_farmaceutico"]: f["cantidad_ventas"] for f in q05.ejecutar()}
+        self.assertEqual(resultado["F001"], 60)
 
     def test_q11_dataset_mes_vacio_y_octubre(self):
         self.assertEqual(q11.ejecutar(), [])

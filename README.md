@@ -95,7 +95,7 @@ python3 -c "from consultas.q09 import ejecutar; print(ejecutar())"
 python3 -c "from consultas.q11 import ejecutar; print(ejecutar())"
 ```
 
-Q05 cuenta desde `hoy() - 60 días` inclusive hasta mañana exclusivo, con la fecha de Argentina. Q11 usa el año y mes de `hoy()`. Con los CSV provistos, sin extras, noviembre de 2026 no tiene ingresos: Q11 devuelve `[]`. Los ejemplos, retornos y decisiones están en [docs/informe-consultas-lectura.md](docs/informe-consultas-lectura.md).
+Q05 cuenta 60 días incluyendo hoy: desde `hoy() - 59 días` inclusive hasta mañana exclusivo, con la fecha de Argentina. Q11 usa el año y mes de `hoy()`. Con los CSV provistos, sin extras, noviembre de 2026 no tiene ingresos: Q11 devuelve `[]`. Los ejemplos, retornos y decisiones están en [docs/informe-consultas-lectura.md](docs/informe-consultas-lectura.md).
 
 ### Pruebas de las consultas
 
@@ -105,7 +105,7 @@ Con MongoDB levantado y las dependencias instaladas, desde la raíz del proyecto
 python3 -m unittest discover -s tests -v
 ```
 
-Las 16 pruebas requieren MongoDB real; fallan si no está disponible. Cargan los nueve CSV provistos en una base temporal `farmared_test_<id>`, agregan casos borde y eliminan esa base al terminar. No borran ni recargan la base `farmared`. Usan la URI de `MONGO_URI` (por defecto `mongodb://127.0.0.1:27017`). Para otra instancia, por ejemplo:
+Las 17 pruebas requieren MongoDB real; fallan si no está disponible. Cargan los nueve CSV provistos en una base temporal `farmared_test_<id>`, agregan casos borde y eliminan esa base al terminar. No borran ni recargan la base `farmared`. Usan la URI de `MONGO_URI` (por defecto `mongodb://127.0.0.1:27017`). Para otra instancia, por ejemplo:
 
 ```bash
 MONGO_URI=mongodb://127.0.0.1:27018 python3 -m unittest discover -s tests -v

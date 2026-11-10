@@ -31,9 +31,9 @@ Código: [q05.py](../src/consultas/q05.py). Se parte de los farmacéuticos activ
 
 Conservar el lado de farmacéuticos permite mostrar los ceros. Se cuentan documentos de venta, no unidades ni ítems. Pendientes sí; anuladas no. Se incluye `F007`, que trabaja en la droguería, porque el enunciado no limita el tipo de sucursal. [P18, p. 6; T14, p. 23; T15, p. 33]
 
-La consigna no precisa la inclusión de los límites: se decidió tomar `hoy() - 60 días` inclusive hasta mañana exclusivo. `hoy()` se evalúa una vez y usa Argentina. No se fija una fecha en el código de producción. [P18, p. 6]
+La consigna no precisa la inclusión de los límites: se decidió contar 60 días incluyendo hoy, desde `hoy() - 59 días` inclusive hasta mañana exclusivo. La revisión corrigió el rango anterior, que incluía 61 fechas. `hoy()` se evalúa una vez y usa Argentina. No se fija una fecha en el código de producción. [P18, p. 6]
 
-El 2026-11-10 el corte es 2026-09-11. Resultado resumido:
+El 2026-11-10 el corte es 2026-09-12. Resultado resumido:
 
 | Farmacéutico | Ventas |
 |---|---|
@@ -102,6 +102,6 @@ También se ejecutó Q15 sobre `V011` en una base de prueba con reloj en 2026-11
 
 Se inició MongoDB `8.3.11` en un contenedor aislado (`farmared-consultas-test`, `127.0.0.1:27018`), se ejecutó el cargador real y luego las seis consultas con el reloj del sistema. Los resultados coincidieron con los controles anteriores. El aviso de grafo pendiente es esperado: esa parte sigue sin implementar y estas lecturas usan MongoDB.
 
-Se ejecutaron **16 pruebas de integración, todas correctas**, en [tests/test_consultas.py](../tests/test_consultas.py). Usan los nueve CSV completos y una base temporal propia. Cubren los seis resultados, proveedor inactivo, referencias, límites de stock e importe, vencidos, ceros, estados, conteo de ventas frente a ítems, empates, producto inactivo, mes vacío, límites de mes/año, farmacéutico inactivo, cambio de reloj sin recrear vista, repetición de la carga y preparación de la vista e integración con Q15. El verificador de datasets también pasó.
+Se ejecutaron **17 pruebas de integración, todas correctas**, en [tests/test_consultas.py](../tests/test_consultas.py). Usan los nueve CSV completos y una base temporal propia. Cubren los seis resultados, proveedor inactivo, referencias, límites de stock e importe, vencidos, ceros, estados, conteo de ventas frente a ítems, empates, producto inactivo, mes vacío, límites de mes/año, farmacéutico inactivo, cambio de reloj sin recrear vista, repetición de la carga y preparación de la vista e integración con Q15. La regresión de Q05 carga una venta por fecha durante 61 días y exige contar exactamente 60. El verificador de datasets también pasó.
 
 No se agregaron dependencias ni índices. No se implementaron el grafo ni las otras seis consultas pendientes. Los registros adicionales persistentes del grupo y los diagramas siguen abiertos; los casos de prueba no reemplazan los diez registros propios por colección/tabla exigidos para la entrega. [P18, pp. 1, 6–7]
