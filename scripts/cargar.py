@@ -19,7 +19,7 @@ sys.path.insert(0, str(RAIZ / "src"))
 from pymongo.errors import ServerSelectionTimeoutError  # noqa: E402
 
 from db import COLECCIONES, base, fecha_de_partes  # noqa: E402
-from grafo import GrafoPendiente, reconstruir  # noqa: E402
+from grafo import GrafoPendiente, proyectar_todo  # noqa: E402
 
 DATOS = RAIZ / "datasets"
 EXTRA = DATOS / "extra"
@@ -92,9 +92,9 @@ def main() -> int:
         return 1
 
     try:
-        reconstruir()
+        proyectar_todo()
     except GrafoPendiente:
-        print("Grafo pendiente: se rehace cuando Neo4j esté implementado.")
+        print("Grafo pendiente: no se pudo proyectar. Se rehace con reconstruir().")
     except Exception:
         print("Grafo pendiente: la proyección falló y se rehace con reconstruir().")
     print("Carga lista.")
