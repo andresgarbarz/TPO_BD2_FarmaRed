@@ -5,12 +5,13 @@ Sin parámetros de entrada.
 Motor: Neo4j
 
 Propósito: listar las ventas en estado Pendiente y, para cada una, el
-farmacéutico que la atendió con su nombre, apellido, matrícula y la sucursal
-donde trabaja.
+farmacéutico que la atendió con su nombre, apellido y matrícula, junto con la
+sucursal donde se registró la venta.
 
 Valor de retorno:
     list[dict] ordenada por fecha e id de venta. Cada fila trae id_venta, fecha,
-    total y los datos del farmacéutico y de la sucursal.
+    total y los datos del farmacéutico y de la sucursal. Si Neo4j no está
+    disponible, levanta GrafoPendiente.
 """
 
 from grafo import consultar
@@ -22,7 +23,7 @@ DESCRIPCION = "Ventas Pendiente con el farmacéutico y la sucursal."
 
 CONSULTA = """
 MATCH (f:Farmaceutico)-[:ATENDIO]->(v:Venta {estado: 'Pendiente'})
-MATCH (f)-[:TRABAJA_EN]->(s:Sucursal)
+MATCH (v)-[:EN_SUCURSAL]->(s:Sucursal)
 RETURN v.id AS id_venta, v.fecha AS fecha, v.total AS total,
        f.id AS id_farmaceutico, f.nombre AS nombre_farmaceutico,
        f.apellido AS apellido_farmaceutico, f.matricula AS matricula,

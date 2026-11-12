@@ -10,7 +10,8 @@ sola línea de tiempo. Las ventas usan fecha y las recetas fecha_emision.
 Valor de retorno:
     list[dict] ordenada por fecha. Cada fila trae tipo_evento ("venta" o
     "receta"), id, fecha, estado, total (solo ventas) y detalle (tipo de venta o
-    de receta). Si el cliente no existe o no tiene eventos, devuelve [].
+    de receta). Si el cliente no existe o no tiene eventos, devuelve []. Si Neo4j
+    no está disponible, levanta GrafoPendiente.
 """
 
 from grafo import consultar
