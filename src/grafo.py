@@ -3,7 +3,8 @@
 Mongo es la fuente de verdad. La carga completa llama a proyectar_todo, que crea
 los constraints, vacía el grafo y lo reconstruye desde Mongo en una transacción.
 Las escrituras individuales de q13, q14 y q15 llaman a upsert_cliente,
-upsert_venta y upsert_receta, que usan MERGE para no duplicar nodos ni relaciones.
+upsert_venta_y_receta y las proyecciones puntuales, que reemplazan las relaciones
+viejas para no duplicar ni conservar vínculos obsoletos.
 
 Si una proyección falla, la escritura en Mongo ya está confirmada: proyectar
 devuelve el aviso y no propaga el error. consultar expone una lectura Cypher
@@ -14,6 +15,7 @@ from contextlib import contextmanager
 from datetime import date, datetime
 
 from neo4j import GraphDatabase
+from neo4j.exceptions import DriverError, Neo4jError
 
 from db import NEO4J_URI, base
 
@@ -24,13 +26,16 @@ class GrafoPendiente(Exception):
     """Neo4j no está disponible o la proyección no se pudo aplicar."""
 
 
+class ReferenciaGrafo(Exception):
+    """Una referencia del documento no existe en el grafo."""
+
+
 @contextmanager
 def _driver():
     driver = GraphDatabase.driver(
         NEO4J_URI,
         connection_timeout=3,
         connection_acquisition_timeout=3,
-        max_transaction_retry_time=0,
     )
     try:
         yield driver
@@ -54,6 +59,22 @@ def _fecha(valor):
     if isinstance(valor, date):
         return valor
     return valor
+
+
+def _exigir(tx, etiqueta: str, ids: list[str]) -> None:
+    """Falla si alguna de las referencias no existe en el grafo."""
+    if etiqueta not in ETIQUETAS:
+        raise ValueError(f"etiqueta desconocida: {etiqueta}")
+    unicos = list(dict.fromkeys(ids))
+    if not unicos:
+        return
+    filas = tx.run(
+        f"MATCH (n:{etiqueta}) WHERE n.id IN $ids RETURN n.id AS id",
+        ids=unicos,
+    )
+    faltan = set(unicos) - {fila["id"] for fila in filas}
+    if faltan:
+        raise ReferenciaGrafo(f"{etiqueta} inexistente en el grafo: {sorted(faltan)}")
 
 
 def _crear_constraints(sesion) -> None:
@@ -89,6 +110,7 @@ def _upsert_sucursal(tx, documento: dict) -> None:
 
 
 def _upsert_farmaceutico(tx, documento: dict) -> None:
+    _exigir(tx, "Sucursal", [documento["id_sucursal"]])
     tx.run(
         """
         MERGE (f:Farmaceutico {id: $id})
@@ -98,7 +120,10 @@ def _upsert_farmaceutico(tx, documento: dict) -> None:
             f.cargo = $cargo,
             f.activo = $activo
         WITH f
-        MERGE (s:Sucursal {id: $id_sucursal})
+        OPTIONAL MATCH (f)-[vieja:TRABAJA_EN]->()
+        DELETE vieja
+        WITH f
+        MATCH (s:Sucursal {id: $id_sucursal})
         MERGE (f)-[:TRABAJA_EN]->(s)
         """,
         id=documento["_id"],
@@ -164,6 +189,7 @@ def _upsert_cliente(tx, documento: dict) -> None:
 
 
 def _upsert_receta(tx, documento: dict) -> None:
+    _exigir(tx, "Cliente", [documento["id_cliente"]])
     tx.run(
         """
         MERGE (r:Receta {id: $id})
@@ -176,7 +202,10 @@ def _upsert_receta(tx, documento: dict) -> None:
             r.proxima_dispensa = $proxima_dispensa,
             r.estado = $estado
         WITH r
-        MERGE (c:Cliente {id: $id_cliente})
+        OPTIONAL MATCH (r)-[vieja:PRESCRIPTA_A]->()
+        DELETE vieja
+        WITH r
+        MATCH (c:Cliente {id: $id_cliente})
         MERGE (r)-[:PRESCRIPTA_A]->(c)
         """,
         id=documento["_id"],
@@ -192,26 +221,40 @@ def _upsert_receta(tx, documento: dict) -> None:
     ).consume()
 
 
-def _items_agrupados(items: list[dict]) -> list[dict]:
-    """Suma cantidades si una venta repite el mismo producto."""
-    agrupados: dict[str, dict] = {}
-    orden: list[str] = []
-    for item in items:
-        id_producto = item["id_producto"]
-        if id_producto not in agrupados:
-            agrupados[id_producto] = {
-                "id_producto": id_producto,
+def _items_detalle(items: list[dict]) -> list[dict]:
+    """Conserva una relación por ítem, sin perder precios distintos."""
+    resultado = []
+    for indice, item in enumerate(items):
+        id_detalle = item.get("id_detalle")
+        if id_detalle is None:
+            id_detalle = f"{item['id_producto']}#{indice}"
+        resultado.append(
+            {
+                "id_detalle": id_detalle,
+                "id_producto": item["id_producto"],
                 "cantidad": item["cantidad"],
                 "precio_unit": item["precio_unit"],
             }
-            orden.append(id_producto)
-        else:
-            agrupados[id_producto]["cantidad"] += item["cantidad"]
-    return [agrupados[id_producto] for id_producto in orden]
+        )
+    return resultado
 
 
 def _upsert_venta(tx, documento: dict) -> None:
     id_venta = documento.get("_id") or documento["id_venta"]
+    id_cliente = documento["id_cliente"]
+    id_farmaceutico = documento["id_farmaceutico"]
+    id_receta = documento.get("id_receta")
+    id_sucursal = documento.get("id_sucursal")
+    items = _items_detalle(documento.get("items", []))
+
+    _exigir(tx, "Cliente", [id_cliente])
+    _exigir(tx, "Farmaceutico", [id_farmaceutico])
+    if id_receta:
+        _exigir(tx, "Receta", [id_receta])
+    _exigir(tx, "Producto", [item["id_producto"] for item in items])
+    if id_sucursal:
+        _exigir(tx, "Sucursal", [id_sucursal])
+
     tx.run(
         """
         MERGE (v:Venta {id: $id})
@@ -220,13 +263,14 @@ def _upsert_venta(tx, documento: dict) -> None:
             v.medio_pago = $medio_pago,
             v.total = $total,
             v.estado = $estado,
-            v.fecha_registro = $fecha_registro
+            v.fecha_registro = $fecha_registro,
+            v.id_sucursal = null
         WITH v
-        MERGE (c:Cliente {id: $id_cliente})
-        MERGE (c)-[:REALIZO]->(v)
+        OPTIONAL MATCH (v)<-[entrada:REALIZO|ATENDIO]-()
+        DELETE entrada
         WITH v
-        MERGE (f:Farmaceutico {id: $id_farmaceutico})
-        MERGE (f)-[:ATENDIO]->(v)
+        OPTIONAL MATCH (v)-[salida:CON_RECETA|INCLUYE|EN_SUCURSAL]->()
+        DELETE salida
         """,
         id=id_venta,
         fecha=_fecha(documento["fecha"]),
@@ -235,30 +279,69 @@ def _upsert_venta(tx, documento: dict) -> None:
         total=documento["total"],
         estado=documento["estado"],
         fecha_registro=_fecha(documento.get("fecha_registro")),
-        id_cliente=documento["id_cliente"],
-        id_farmaceutico=documento["id_farmaceutico"],
     ).consume()
 
-    id_receta = documento.get("id_receta")
+    tx.run(
+        """
+        MATCH (v:Venta {id: $id})
+        MATCH (c:Cliente {id: $id_cliente})
+        MERGE (c)-[:REALIZO]->(v)
+        WITH v
+        MATCH (f:Farmaceutico {id: $id_farmaceutico})
+        MERGE (f)-[:ATENDIO]->(v)
+        """,
+        id=id_venta,
+        id_cliente=id_cliente,
+        id_farmaceutico=id_farmaceutico,
+    ).consume()
+
+    if id_sucursal:
+        tx.run(
+            """
+            MATCH (v:Venta {id: $id})
+            MATCH (s:Sucursal {id: $id_sucursal})
+            MERGE (v)-[:EN_SUCURSAL]->(s)
+            SET v.id_sucursal = s.id
+            """,
+            id=id_venta,
+            id_sucursal=id_sucursal,
+        ).consume()
+    else:
+        registro = tx.run(
+            """
+            MATCH (v:Venta {id: $id})
+            MATCH (f:Farmaceutico {id: $id_farmaceutico})-[:TRABAJA_EN]->(s:Sucursal)
+            MERGE (v)-[:EN_SUCURSAL]->(s)
+            SET v.id_sucursal = s.id
+            RETURN s.id AS id
+            LIMIT 1
+            """,
+            id=id_venta,
+            id_farmaceutico=id_farmaceutico,
+        ).single()
+        if registro is None:
+            raise ReferenciaGrafo(
+                f"Farmaceutico {id_farmaceutico} sin sucursal en el grafo"
+            )
+
     if id_receta:
         tx.run(
             """
             MATCH (v:Venta {id: $id_venta})
-            MERGE (r:Receta {id: $id_receta})
+            MATCH (r:Receta {id: $id_receta})
             MERGE (v)-[:CON_RECETA]->(r)
             """,
             id_venta=id_venta,
             id_receta=id_receta,
         ).consume()
 
-    items = _items_agrupados(documento.get("items", []))
     if items:
         tx.run(
             """
             MATCH (v:Venta {id: $id_venta})
             UNWIND $items AS item
-            MERGE (p:Producto {id: item.id_producto})
-            MERGE (v)-[i:INCLUYE]->(p)
+            MATCH (p:Producto {id: item.id_producto})
+            MERGE (v)-[i:INCLUYE {id_detalle: item.id_detalle}]->(p)
             SET i.cantidad = item.cantidad,
                 i.precio_unit = item.precio_unit
             """,
@@ -285,6 +368,18 @@ def upsert_receta(documento: dict) -> None:
         sesion.execute_write(_upsert_receta, documento)
 
 
+def upsert_venta_y_receta(documento: dict, receta: dict | None = None) -> None:
+    """Proyecta la venta y su receta en una sola transacción."""
+
+    def escribir(tx) -> None:
+        if receta is not None:
+            _upsert_receta(tx, receta)
+        _upsert_venta(tx, documento)
+
+    with _sesion() as sesion:
+        sesion.execute_write(escribir)
+
+
 def _reconstruir(tx, datos: dict[str, list[dict]]) -> None:
     tx.run("MATCH (n) DETACH DELETE n").consume()
     for documento in datos["sucursales"]:
@@ -302,15 +397,25 @@ def _reconstruir(tx, datos: dict[str, list[dict]]) -> None:
 
 
 def proyectar_todo() -> None:
-    """Rehace el grafo completo desde Mongo en una sola transacción."""
+    """Rehace el grafo completo desde Mongo en una sola transacción.
+
+    La lectura de las colecciones no es una foto transaccional: la carga debe
+    ejecutarse sin escrituras concurrentes en Mongo.
+    """
     db = base()
+    farmaceuticos = list(db.farmaceuticos.find())
+    sucursal_de = {f["_id"]: f["id_sucursal"] for f in farmaceuticos}
+    ventas = list(db.ventas.find())
+    for venta in ventas:
+        if not venta.get("id_sucursal"):
+            venta["id_sucursal"] = sucursal_de.get(venta["id_farmaceutico"])
     datos = {
         "sucursales": list(db.sucursales.find()),
-        "farmaceuticos": list(db.farmaceuticos.find()),
+        "farmaceuticos": farmaceuticos,
         "productos": list(db.productos.find()),
         "clientes": list(db.clientes.find()),
         "recetas": list(db.recetas.find()),
-        "ventas": list(db.ventas.find()),
+        "ventas": ventas,
     }
     try:
         with _sesion() as sesion:
@@ -326,17 +431,25 @@ def reconstruir() -> None:
 
 
 def consultar(cypher: str, **parametros) -> list[dict]:
-    """Ejecuta una lectura Cypher parametrizada y devuelve filas como dicts."""
-    with _sesion() as sesion:
-        return sesion.execute_read(
-            lambda tx: [registro.data() for registro in tx.run(cypher, **parametros)]
-        )
+    """Ejecuta una lectura Cypher parametrizada y devuelve filas como dicts.
+
+    Si Neo4j no está disponible, levanta GrafoPendiente con un mensaje claro.
+    """
+    try:
+        with _sesion() as sesion:
+            return sesion.execute_read(
+                lambda tx: [
+                    registro.data() for registro in tx.run(cypher, **parametros)
+                ]
+            )
+    except (Neo4jError, DriverError, OSError) as error:
+        raise GrafoPendiente("no se pudo consultar el grafo") from error
 
 
 def proyectar(funcion, *args) -> str | None:
     """Ejecuta una proyección. Si falla, devuelve el aviso y no propaga."""
     try:
         funcion(*args)
-    except Exception:
+    except (GrafoPendiente, ReferenciaGrafo, Neo4jError, DriverError, OSError):
         return "el grafo quedó pendiente"
     return None
