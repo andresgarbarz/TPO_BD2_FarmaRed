@@ -22,7 +22,7 @@ una venta nueva. El orden de vencimiento es {vencimiento: 1, _id: 1}.
 """
 
 from db import base, hoy
-from grafo import proyectar, upsert_receta, upsert_venta
+from grafo import proyectar, upsert_venta_y_receta
 from reglas import Rechazo, aplicar_receta, restaurar_receta, validar_venta
 
 
@@ -135,6 +135,7 @@ def ejecutar(id_venta: str) -> dict:
                 "estado": "Completada",
                 "fecha": hoy(),
                 "fecha_registro": fecha_reserva,
+                "id_sucursal": contexto["sucursal"]["_id"],
                 "items": items,
             }
         },
@@ -146,13 +147,11 @@ def ejecutar(id_venta: str) -> dict:
         return {"ok": False, "error": "la venta ya no está Pendiente"}
 
     documento = db.ventas.find_one({"_id": id_venta})
-    avisos = [
-        proyectar(upsert_venta, documento),
-    ]
+    receta = None
     if contexto["receta"] is not None:
         receta = db.recetas.find_one({"_id": contexto["receta"]["_id"]})
-        avisos.append(proyectar(upsert_receta, receta))
-    return _respuesta(documento, avisos)
+    aviso = proyectar(upsert_venta_y_receta, documento, receta)
+    return _respuesta(documento, [aviso])
 
 
 def _lotes_de(items: list[dict]) -> list[tuple[str, int]]:
