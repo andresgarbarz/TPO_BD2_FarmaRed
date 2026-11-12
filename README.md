@@ -11,7 +11,7 @@ Trabajo práctico obligatorio, 2.º cuatrimestre 2026. Red de farmacias con drog
 
 ## Motores
 
-MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidades. `src/grafo.py` expone `reconstruir()`, `upsert_cliente`, `upsert_venta` y `upsert_receta`, vacías hasta que se implemente esa parte. Reciben el documento tal como quedó en Mongo. La carga llama a `reconstruir()` al final; la 13, a `upsert_cliente`; la 14 y la 15, a `upsert_venta` y, si hubo receta, a `upsert_receta`. Si la proyección falla, la escritura en Mongo queda hecha y la consulta avisa que el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo.
+MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidades. `src/grafo.py` implementa la proyección: `proyectar_todo()` reconstruye el grafo completo desde Mongo, `upsert_cliente`, `upsert_venta` y `upsert_receta` proyectan las escrituras individuales, y `consultar()` ejecuta Cypher para q02, q03 y q10. La carga llama a `proyectar_todo()` al final; la 13, a `upsert_cliente`; la 14 y la 15, a `upsert_venta` y, si hubo receta, a `upsert_receta`. Si la proyección falla, la escritura en Mongo queda hecha y la consulta avisa que el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. La carga completa vacía el grafo antes de reproyectar, así que dos corridas dejan el mismo resultado.
 
 ## Entorno
 
@@ -88,6 +88,14 @@ python3 -c "from consultas.q14 import ejecutar; print(ejecutar('C006', 'F001', [
 python3 -c "from consultas.q15 import ejecutar; print(ejecutar('V011'))"
 ```
 
+Las consultas de la Parte A leen el grafo:
+
+```bash
+python3 -c "from consultas.q02 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q03 import ejecutar; print(ejecutar('C006'))"
+python3 -c "from consultas.q10 import ejecutar; print(ejecutar('S002'))"
+```
+
 La 14 no recibe la fecha: usa el día de hoy en Argentina. La 15 recibe el id de una venta Pendiente. El alta de la 13 y la venta de la 14 generan el siguiente id (`C009`, `V017`, `D023`).
 
 El antes y el después de los casos de esta parte, y las decisiones de consistencia, están en [docs/informe-entorno-y-escrituras.md](docs/informe-entorno-y-escrituras.md).
@@ -120,6 +128,6 @@ datasets/extra/    registros propios, si existen
 docs/              material de esta parte para el informe
 scripts/           verificación y carga
 src/db.py          conexión y hoy()
-src/grafo.py       proyección vacía
+src/grafo.py       proyección a Neo4j y Cypher de q02, q03 y q10
 src/consultas/     q01.py … q15.py
 ```

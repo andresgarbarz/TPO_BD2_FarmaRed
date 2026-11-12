@@ -10,7 +10,7 @@ Los ejemplos se tomaron sobre una carga recién hecha. Recargar borra el cliente
 
 Cada archivo de `datasets/extra/` se carga si existe, con el mismo nombre y los mismos encabezados. La salida informa, por colección, cuántos documentos son de la cátedra y cuántos propios. Sin esa carpeta, avisa que no hay registros propios. Un extra con el id `C001`, que ya trae la cátedra, frenó la carga. Una venta `V017` con `id_cliente` `C999` también: la referencia no existe y no se escribió nada.
 
-Las fechas se guardan como `Date` armados con año, mes y día. `_id` es el id de la cátedra. Hay un índice único `dni_unico` sobre `clientes.dni`. Al final se llama a `reconstruir()`. Como Neo4j todavía no está implementado, la carga avisa que el grafo quedó pendiente.
+Las fechas se guardan como `Date` armados con año, mes y día. `_id` es el id de la cátedra. Hay un índice único `dni_unico` sobre `clientes.dni`. Al final se llama a `proyectar_todo()`. Si Neo4j no está disponible, la carga avisa que el grafo quedó pendiente.
 
 ## Consulta 13
 
@@ -71,7 +71,7 @@ No se usan transacciones de varios documentos. En MongoDB esas transacciones pid
 
 Cada ítem descontado guarda `lotes: [{id_lote, unidades}]`. Las ventas que vienen del CSV no lo traen.
 
-Si la proyección a Neo4j falla, Mongo ya confirmó. La consulta responde bien y agrega `aviso_grafo`: el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. Hoy las cuatro funciones de `src/grafo.py` están vacías, así que los casos que entran muestran ese aviso.
+Si la proyección a Neo4j falla, Mongo ya confirmó. La consulta responde bien y agrega `aviso_grafo`: el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. El detalle del grafo y de q02, q03 y q10 está en [informe-grafo.md](informe-grafo.md).
 
 ## Limitación y supuestos
 
