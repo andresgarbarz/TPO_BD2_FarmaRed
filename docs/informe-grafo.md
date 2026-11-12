@@ -37,7 +37,7 @@ completo). Proveedores, stock y detalle de lotes quedan en MongoDB.
 | `Farmaceutico` | `id`, `nombre`, `apellido`, `matricula`, `cargo`, `activo` |
 | `Producto` | `id`, `nombre`, `principio_activo`, `categoria`, `presentacion`, `condicion_venta`, `precio_unit`, `activo` |
 | `Receta` | `id`, `medico`, `matricula_medico`, `fecha_emision`, `tipo`, `dispensas_autorizadas`, `dispensas_realizadas`, `proxima_dispensa`, `estado` |
-| `Venta` | `id`, `fecha`, `tipo`, `medio_pago`, `total`, `estado`, `fecha_registro` |
+| `Venta` | `id`, `fecha`, `tipo`, `medio_pago`, `total`, `estado`, `fecha_registro`, `id_sucursal` |
 
 `id` es el identificador de la cátedra (`C001`, `V001`, `PRD001`, …). Hay un
 constraint de unicidad sobre `id` para cada label, creado con
@@ -51,7 +51,8 @@ de Neo4j, no como texto.
 | `REALIZO` | `Cliente` → `Venta` | — |
 | `ATENDIO` | `Farmaceutico` → `Venta` | — |
 | `TRABAJA_EN` | `Farmaceutico` → `Sucursal` | — |
-| `INCLUYE` | `Venta` → `Producto` | `cantidad`, `precio_unit` |
+| `EN_SUCURSAL` | `Venta` → `Sucursal` | — |
+| `INCLUYE` | `Venta` → `Producto` | `id_detalle`, `cantidad`, `precio_unit` |
 | `CON_RECETA` | `Venta` → `Receta` | — |
 | `PRESCRIPTA_A` | `Receta` → `Cliente` | — |
 
@@ -69,7 +70,8 @@ flowchart LR
     Cliente -->|REALIZO| Venta
     Farmaceutico -->|ATENDIO| Venta
     Farmaceutico -->|TRABAJA_EN| Sucursal
-    Venta -->|INCLUYE: cantidad, precio_unit| Producto
+    Venta -->|EN_SUCURSAL| Sucursal
+    Venta -->|INCLUYE: id_detalle, cantidad, precio_unit| Producto
     Venta -.->|CON_RECETA| Receta
     Receta -->|PRESCRIPTA_A| Cliente
 ```
@@ -86,25 +88,32 @@ escrituras que no hayan pasado primero por Mongo.
   `proyectar_todo()`. Esa función lee las colecciones, crea los constraints,
   vacía el grafo con `MATCH (n) DETACH DELETE n` y reconstruye todo en una
   transacción de escritura. El vaciado garantiza que el grafo refleje exactamente
-  la carga actual y no conserve nodos de una carga anterior. Los constraints se
-  crean antes de la transacción porque Neo4j no permite mezclar DDL y escrituras
-  en la misma transacción.
+  la carga actual y no conserve nodos de una carga anterior. La lectura previa de
+  las colecciones no es una foto transaccional, así que la carga debe correr sin
+  escrituras concurrentes en Mongo. Los constraints se crean antes de la
+  transacción porque Neo4j no permite mezclar DDL y escrituras en la misma
+  transacción.
 - **Escrituras individuales.** q13 llama a `upsert_cliente`; q14 y q15 llaman a
-  `upsert_venta` y, si corresponde, `upsert_receta`. Todas usan `MERGE`, así que
-  repetir la operación no duplica nodos ni relaciones. Si una venta pasa de
-  `Pendiente` a `Completada`, el `MERGE` actualiza el nodo existente.
+  `upsert_venta_y_receta`, que escribe la venta y su receta en una sola
+  transacción. Cada `upsert` borra las relaciones viejas del nodo antes de
+  volver a crearlas, así que no duplica ni conserva vínculos obsoletos si cambia
+  el cliente, el farmacéutico, la sucursal o la receta.
 - **Fallo de Neo4j.** Si la proyección falla, la escritura en Mongo ya está
   confirmada. `proyectar()` captura el error y la consulta devuelve
   `aviso_grafo: "el grafo quedó pendiente"` sin propagar la excepción.
   `reconstruir()` (o `proyectar_todo()`) rehace el grafo desde Mongo.
-- **Ítems repetidos.** Si una venta tuviera dos líneas del mismo producto,
-  `upsert_venta` suma las cantidades antes de crear `INCLUYE`, para no duplicar
-  la relación. El dataset de la cátedra no repite productos en una venta.
+- **Ítems repetidos.** `upsert_venta` conserva una relación `INCLUYE` por línea
+  de detalle, identificada con `id_detalle`. Si una venta repite un producto con
+  precios distintos, cada línea mantiene su propio `precio_unit`.
+- **Sucursal histórica.** La carga agrega `id_sucursal` a cada venta a partir
+  del farmacéutico y q14/q15 lo fijan al registrar o completar la venta. q02 y
+  q10 recorren `(Venta)-[:EN_SUCURSAL]->(Sucursal)`, por lo que una reasignación
+  posterior del farmacéutico no mueve ventas históricas de sucursal.
 - **Fechas.** `_fecha()` convierte los `datetime` de Mongo a `datetime.date`,
   que el driver envía como `date` de Neo4j.
 
 Verificación de idempotencia: se corrió `scripts/cargar.py` dos veces. Las dos
-dejaron 58 nodos y 80 relaciones:
+dejaron 58 nodos y 96 relaciones:
 
 | Nodo | Cantidad |
 |---|---:|
@@ -119,6 +128,7 @@ dejaron 58 nodos y 80 relaciones:
 |---|---:|
 | `ATENDIO` | 16 |
 | `CON_RECETA` | 10 |
+| `EN_SUCURSAL` | 16 |
 | `INCLUYE` | 22 |
 | `PRESCRIPTA_A` | 9 |
 | `REALIZO` | 16 |
@@ -131,13 +141,13 @@ dejaron 58 nodos y 80 relaciones:
 **Enunciado.** Ventas en estado `Pendiente` con el farmacéutico asignado
 (nombre, matrícula y sucursal) y el total.
 
-**Relación.** `Venta` se conecta con `Farmaceutico` por `ATENDIO` y el
-farmacéutico con `Sucursal` por `TRABAJA_EN`. El recorrido es
-`Farmaceutico → Venta` y `Farmaceutico → Sucursal`.
+**Relación.** `Venta` se conecta con `Farmaceutico` por `ATENDIO` y con
+`Sucursal` por `EN_SUCURSAL`. El recorrido es `Farmaceutico → Venta →
+Sucursal`; la sucursal queda fijada al registrar la venta.
 
 ```cypher
 MATCH (f:Farmaceutico)-[:ATENDIO]->(v:Venta {estado: 'Pendiente'})
-MATCH (f)-[:TRABAJA_EN]->(s:Sucursal)
+MATCH (v)-[:EN_SUCURSAL]->(s:Sucursal)
 RETURN v.id AS id_venta, v.fecha AS fecha, v.total AS total,
        f.id AS id_farmaceutico, f.nombre AS nombre_farmaceutico,
        f.apellido AS apellido_farmaceutico, f.matricula AS matricula,
@@ -198,13 +208,14 @@ Si el cliente no existe o no tiene ventas ni recetas, devuelve `[]`.
 través del farmacéutico que registró la venta, esté activo o no.
 
 **Relación.** El recorrido es
-`(Cliente)-[:REALIZO]->(Venta)<-[:ATENDIO]-(Farmaceutico)-[:TRABAJA_EN]->(Sucursal)`.
-No se filtra `f.activo`: la consulta incluye farmacéuticos inactivos.
-`DISTINCT` evita repetir un cliente que compró varias veces en la sucursal.
+`(Cliente)-[:REALIZO]->(Venta)-[:EN_SUCURSAL]->(Sucursal)` y
+`(Venta)<-[:ATENDIO]-(Farmaceutico)`. No se filtra `f.activo`: la consulta
+incluye farmacéuticos inactivos. `DISTINCT` evita repetir un cliente que compró
+varias veces en la sucursal.
 
 ```cypher
-MATCH (c:Cliente)-[:REALIZO]->(v:Venta)<-[:ATENDIO]-(f:Farmaceutico)
-      -[:TRABAJA_EN]->(s:Sucursal {id: $id_sucursal})
+MATCH (c:Cliente)-[:REALIZO]->(v:Venta)-[:EN_SUCURSAL]->(s:Sucursal {id: $id_sucursal})
+MATCH (f:Farmaceutico)-[:ATENDIO]->(v)
 RETURN DISTINCT c.id AS id_cliente, c.nombre AS nombre,
        c.apellido AS apellido, c.dni AS dni, c.activo AS activo
 ORDER BY c.apellido, c.nombre

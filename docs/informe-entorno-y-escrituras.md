@@ -69,9 +69,9 @@ La 14 inserta la venta después del descuento y de la receta. Si no puede asigna
 
 No se usan transacciones de varios documentos. En MongoDB esas transacciones piden un replica set, y este entorno es una sola instancia. La estrategia es el orden de las operaciones, la actualización condicional y la reposición.
 
-Cada ítem descontado guarda `lotes: [{id_lote, unidades}]`. Las ventas que vienen del CSV no lo traen.
+Cada ítem descontado guarda `lotes: [{id_lote, unidades}]`. Las ventas que vienen del CSV no lo traen. La venta también guarda `id_sucursal`, la sucursal del farmacéutico que la registró; las ventas del CSV lo reciben al cargarse.
 
-Si la proyección a Neo4j falla, Mongo ya confirmó. La consulta responde bien y agrega `aviso_grafo`: el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. El detalle del grafo y de q02, q03 y q10 está en [informe-grafo.md](informe-grafo.md).
+Si la proyección a Neo4j falla, Mongo ya confirmó. La consulta responde bien y agrega `aviso_grafo`: el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. La 14 y la 15 proyectan la venta y su receta con `upsert_venta_y_receta`, en una sola transacción, para que el grafo no quede con una mitad actualizada. El detalle del grafo y de q02, q03 y q10 está en [informe-grafo.md](informe-grafo.md).
 
 ## Limitación y supuestos
 

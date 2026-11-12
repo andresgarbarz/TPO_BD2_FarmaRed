@@ -11,7 +11,7 @@ Trabajo práctico obligatorio, 2.º cuatrimestre 2026. Red de farmacias con drog
 
 ## Motores
 
-MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidades. `src/grafo.py` implementa la proyección: `proyectar_todo()` reconstruye el grafo completo desde Mongo, `upsert_cliente`, `upsert_venta` y `upsert_receta` proyectan las escrituras individuales, y `consultar()` ejecuta Cypher para q02, q03 y q10. La carga llama a `proyectar_todo()` al final; la 13, a `upsert_cliente`; la 14 y la 15, a `upsert_venta` y, si hubo receta, a `upsert_receta`. Si la proyección falla, la escritura en Mongo queda hecha y la consulta avisa que el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. La carga completa vacía el grafo antes de reproyectar, así que dos corridas dejan el mismo resultado.
+MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidades. `src/grafo.py` implementa la proyección: `proyectar_todo()` reconstruye el grafo completo desde Mongo, `upsert_cliente` y `upsert_venta_y_receta` proyectan las escrituras individuales, y `consultar()` ejecuta Cypher para q02, q03 y q10. La carga llama a `proyectar_todo()` al final; la 13, a `upsert_cliente`; la 14 y la 15, a `upsert_venta_y_receta`, que escribe la venta y su receta en una sola transacción. Las proyecciones reemplazan las relaciones viejas para no conservar vínculos obsoletos. Si la proyección falla, la escritura en Mongo queda hecha y la consulta avisa que el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. La carga completa vacía el grafo antes de reproyectar, así que dos corridas dejan el mismo resultado.
 
 ## Entorno
 
@@ -57,8 +57,9 @@ Los ejemplos de las consultas 1 a 12 se sacan con una carga recién hecha, porqu
 
 No hay colección de detalle. Cada venta tiene un arreglo `items` con `id_detalle`, `id_producto`, `cantidad` y `precio_unit`.
 
-Dos campos no vienen en los CSV:
+Tres campos no vienen en los CSV:
 
+- `id_sucursal` de la venta: lo agrega la carga a partir del farmacéutico y lo fijan las consultas 14 y 15. Conserva la sucursal donde se registró la venta y no cambia si el farmacéutico se reasigna.
 - `items.lotes`: lo escriben las consultas 14 y 15. Es una lista de `{id_lote, unidades}` con los lotes de los que salió ese ítem.
 - `fecha_registro`: lo escribe solo la consulta 15. En una venta Completada, `fecha` es el día en que computa ingresos. Si la completó la 15, `fecha` es el día de la entrega y la reserva queda en `fecha_registro`. Las consultas 3, 5, 11 y 12 usan `fecha`. La 11 suma el mes de esa fecha, así que una reserva de octubre completada en noviembre entra en noviembre.
 
