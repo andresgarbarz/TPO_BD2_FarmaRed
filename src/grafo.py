@@ -36,11 +36,7 @@ class ReferenciaGrafo(Exception):
 
 @contextmanager
 def _driver():
-    driver = GraphDatabase.driver(
-        NEO4J_URI,
-        connection_timeout=3,
-        connection_acquisition_timeout=3,
-    )
+    driver = GraphDatabase.driver(NEO4J_URI)
     try:
         yield driver
     finally:
