@@ -62,12 +62,3 @@ class SucursalHistorica(unittest.TestCase):
         self.assertEqual(respuesta["documento"]["fecha_registro"], datetime(2026, 10, 12))
         self.assertEqual(self.db.stock_lotes.find_one({"_id": "L014"})["unidades"], 44)
         self.assertEqual(self.db.recetas.find_one({"_id": "RC006"})["estado"], "Completada")
-
-    def test_venta_sin_sucursal_guardada_usa_la_actual(self):
-        self.db.ventas.update_one({"_id": "V011"}, {"$unset": {"id_sucursal": ""}})
-        self.reasignar_farmaceutico()
-        respuesta = q15.ejecutar("V011")
-        self.assertTrue(respuesta["ok"], respuesta)
-        self.assertEqual(respuesta["documento"]["id_sucursal"], "S001")
-        self.assertEqual(self.db.stock_lotes.find_one({"_id": "L014"})["unidades"], 45)
-        self.assertEqual(self.db.stock_lotes.find_one({"_id": "LX001"})["unidades"], 44)

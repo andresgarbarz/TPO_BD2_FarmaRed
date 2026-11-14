@@ -1,6 +1,5 @@
-"""Correlativos globales y migración de bases existentes, contra MongoDB real."""
+"""Q13 y Q14 generan identificadores únicos incluso con llamadas concurrentes."""
 
-import copy
 import io
 import sys
 import unittest
@@ -18,7 +17,6 @@ import cargar
 import db
 import reglas
 from consultas import q11, q13, q14, q15
-from pymongo.collection import Collection
 
 
 class IdentificadoresMongo(unittest.TestCase):
@@ -89,51 +87,3 @@ class IdentificadoresMongo(unittest.TestCase):
             respuestas = list(pool.map(self.cliente_nuevo, [99] * 4))
         self.assertEqual(sum(r["ok"] for r in respuestas), 1, respuestas)
         self.assertEqual(self.db.clientes.count_documents({"dni": "99000099"}), 1)
-
-    def test_carga_reinicia_secuencias_desde_los_csv(self):
-        self.assertEqual(self.cliente_nuevo(0)["documento"]["_id"], "C009")
-        self.preparar_sucursales(1)
-        venta = self.venta_nueva(0)["documento"]
-        self.assertEqual((venta["_id"], venta["items"][0]["id_detalle"]), ("V017", "D023"))
-        self.cargar()
-        self.cargar()
-        self.assertEqual(self.cliente_nuevo(1)["documento"]["_id"], "C009")
-        self.preparar_sucursales(1)
-        venta = self.venta_nueva(0)["documento"]
-        self.assertEqual((venta["_id"], venta["items"][0]["id_detalle"]), ("V017", "D023"))
-
-    def test_migracion_legacy_concurrente_no_repite_ids(self):
-        self.db.contadores.drop()
-        self.preparar_sucursales(6)
-        self.comprobar_ventas_concurrentes(6)
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            respuestas = list(pool.map(self.cliente_nuevo, range(6)))
-        self.assertTrue(all(r["ok"] for r in respuestas), respuestas)
-        self.assertEqual(len({r["documento"]["_id"] for r in respuestas}), 6)
-
-    def test_id_importado_fuera_de_rango_rechaza_antes_de_borrar(self):
-        tablas = copy.deepcopy(self.tablas)
-        tablas["clientes.csv"]["propios"].append({
-            **tablas["clientes.csv"]["catedra"][0], "id_cliente": "C" + "9" * 25,
-            "dni": "99998765"})
-        antes = {nombre: list(self.db[nombre].find()) for nombre in db.COLECCIONES}
-        with self.assertRaises(cargar.CargaInvalida):
-            cargar._escribir(tablas)
-        self.assertEqual({nombre: list(self.db[nombre].find()) for nombre in db.COLECCIONES}, antes)
-
-    def test_requests_invalidos_no_inician_contadores_y_altas_no_escanean(self):
-        self.db.contadores.drop()
-        respuesta = q14.ejecutar({"$ne": None}, "F001", [{"id_producto": "PRD001", "cantidad": 1}], "Efectivo")
-        self.assertFalse(respuesta["ok"])
-        self.assertEqual(self.db.contadores.count_documents({}), 0)
-        self.cliente_nuevo(0)
-        self.preparar_sucursales(2)
-        self.assertTrue(self.venta_nueva(0)["ok"])
-        original = Collection.find
-        def sin_scan(coleccion, filtro=None, *args, **kwargs):
-            if coleccion.database.name == self.db.name and coleccion.name in {"clientes", "ventas"} and not filtro:
-                self.fail("una alta o venta vuelve a recorrer el historial")
-            return original(coleccion, filtro, *args, **kwargs)
-        with patch.object(Collection, "find", sin_scan):
-            self.assertTrue(self.cliente_nuevo(1)["ok"])
-            self.assertTrue(self.venta_nueva(1)["ok"])

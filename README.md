@@ -136,7 +136,7 @@ python3 -c "from consultas.q06 import ejecutar; print(ejecutar())"
 python3 -c "from consultas.q12 import ejecutar; print(ejecutar())"
 ```
 
-Las regresiones cubren entradas inválidas, prevalidación de carga, rollback ante errores, escrituras concurrentes, correlativos, cobertura, sucursal histórica, versiones y recuperación del grafo. Los planes de ejecución se verifican con 20.000 ventas históricas adicionales.
+Las regresiones verifican entradas, resultados y efectos de Q01–Q15: estados y fechas, FEFO, rechazo sin cambios, IDs únicos, cobertura y escrituras concurrentes. También comprueban que Q02 y Q10 reflejen las escrituras después de recuperar o actualizar el grafo.
 
 Sus decisiones y ejemplos están en [docs/informe-consultas-restantes.md](docs/informe-consultas-restantes.md). El modelo y las lecturas del grafo están en [docs/informe-grafo.md](docs/informe-grafo.md).
 
