@@ -33,6 +33,12 @@ services:
   neo4j:
     image: neo4j:5.26.32
     container_name: farmared-neo4j
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-a", "bolt://localhost:7687", "RETURN 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
     environment:
       NEO4J_AUTH: none
       NEO4J_server_memory_heap_initial__size: 256m
