@@ -28,6 +28,7 @@ from pymongo.errors import DuplicateKeyError
 
 from db import base
 from grafo import proyectar, upsert_cliente
+from ids import preparar, reservar
 from reglas import Rechazo, validar_cobertura, validar_texto
 
 
@@ -144,31 +145,16 @@ def _vacio(valor):
 
 
 def _insertar(documento: dict) -> None:
-    clientes = base().clientes
-    for _ in range(5):
-        nuevo = _siguiente_id(clientes)
-        documento["_id"] = nuevo
-        documento["id_cliente"] = nuevo
-        try:
-            clientes.insert_one(dict(documento))
-            return
-        except DuplicateKeyError as error:
-            if "dni" in str(error):
-                raise Rechazo("ya existe un cliente con ese DNI") from error
-            continue
-    raise RuntimeError("id de cliente")
-
-
-def _siguiente_id(clientes) -> str:
-    maximo = 0
-    for doc in clientes.find({}, {"_id": 1}):
-        valor = doc["_id"]
-        if isinstance(valor, str) and valor.startswith("C"):
-            try:
-                maximo = max(maximo, int(valor[1:]))
-            except ValueError:
-                continue
-    return f"C{maximo + 1:03d}"
+    db = base()
+    preparar(db, "C")
+    nuevo = f"C{reservar(db, 'C'):03d}"
+    documento["_id"] = documento["id_cliente"] = nuevo
+    try:
+        db.clientes.insert_one(dict(documento))
+    except DuplicateKeyError as error:
+        if (error.details or {}).get("keyPattern") == {"dni": 1}:
+            raise Rechazo("ya existe un cliente con ese DNI") from error
+        raise RuntimeError("id de cliente") from error
 
 
 def _proyectar(documento: dict) -> dict:

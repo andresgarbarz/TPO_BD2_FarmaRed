@@ -29,7 +29,8 @@ from pymongo.errors import PyMongoError
 
 from db import base, hoy
 from grafo import proyectar, upsert_venta_y_receta
-from reglas import MEDIOS, Rechazo, aplicar_receta, validar_venta
+from ids import preparar, reservar
+from reglas import MEDIOS, Rechazo, aplicar_receta, validar_entrada_venta, validar_venta
 
 from .q15 import descontar
 
@@ -43,6 +44,11 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
     if not isinstance(medio_pago, str) or medio_pago not in MEDIOS:
         return {"ok": False, "error": "el medio de pago no es uno de los previstos"}
 
+    try:
+        validar_entrada_venta(id_cliente, id_farmaceutico, items, id_receta)
+    except Rechazo as rechazo:
+        return {"ok": False, "error": rechazo.mensaje}
+
     db = base()
     fecha = hoy()
 
@@ -55,7 +61,7 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
         armados = descontar(contexto["sucursal"]["_id"], armados, db=db, session=session)
         if contexto["receta"] is not None:
             aplicar_receta(contexto["receta"], fecha, db=db, session=session)
-        siguiente = _maximo(db.ventas, "D", "items.id_detalle", session=session) + 1
+        siguiente = reservar(db, "D", len(armados), session=session)
         for item in armados:
             item["id_detalle"] = f"D{siguiente:03d}"
             siguiente += 1
@@ -77,6 +83,7 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
         return documento, receta
 
     try:
+        preparar(db, "V", "D")
         with db.client.start_session() as session:
             documento, receta = session.with_transaction(registrar)
     except Rechazo as rechazo:
@@ -92,25 +99,6 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
 
 
 def _insertar_venta(documento: dict, *, db, session) -> None:
-    nuevo = f"V{_maximo(db.ventas, 'V', '_id', session=session) + 1:03d}"
+    nuevo = f"V{reservar(db, 'V', session=session):03d}"
     documento["_id"] = documento["id_venta"] = nuevo
     db.ventas.insert_one(dict(documento), session=session)
-
-
-def _maximo(ventas, prefijo: str, campo: str, *, session=None) -> int:
-    maximo = 0
-    if campo == "_id":
-        valores = (doc["_id"] for doc in ventas.find({}, {"_id": 1}, session=session))
-    else:
-        valores = (
-            item.get("id_detalle")
-            for doc in ventas.find({}, {"items.id_detalle": 1}, session=session)
-            for item in doc.get("items", [])
-        )
-    for valor in valores:
-        if isinstance(valor, str) and valor.startswith(prefijo):
-            try:
-                maximo = max(maximo, int(valor[len(prefijo):]))
-            except ValueError:
-                continue
-    return maximo

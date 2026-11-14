@@ -23,6 +23,7 @@ from pymongo.errors import ServerSelectionTimeoutError  # noqa: E402
 from db import COLECCIONES, base, fecha_de_partes  # noqa: E402
 from consultas.q11 import crear_vista  # noqa: E402
 from grafo import GrafoPendiente, proyectar_todo  # noqa: E402
+from ids import desde_documentos, iniciar  # noqa: E402
 
 DATOS = RAIZ / "datasets"
 EXTRA = DATOS / "extra"
@@ -261,6 +262,11 @@ def _escribir(tablas: dict) -> None:
             if len(BSON.encode(documento)) > 16 * 1024 * 1024:
                 raise CargaInvalida(f"{coleccion} {documento['_id']}: supera el tamaño máximo BSON")
 
+    try:
+        secuencias = desde_documentos(documentos)
+    except ValueError as error:
+        raise CargaInvalida(str(error)) from error
+
     db = base()
     for coleccion in COLECCIONES:
         db[coleccion].drop()
@@ -275,6 +281,7 @@ def _escribir(tablas: dict) -> None:
           f"{len(tablas['detalle_ventas.csv']['catedra'])} de la cátedra, "
           f"{len(tablas['detalle_ventas.csv']['propios'])} propios, embebidos en ventas")
     crear_indices()
+    iniciar(db, secuencias)
     crear_vista()
 
 
@@ -288,6 +295,7 @@ def crear_indices() -> None:
     db.ventas.create_index([("estado", 1), ("fecha", 1)], name="ventas_estado_fecha")
     db.stock_lotes.create_index(
         [("id_producto", 1), ("id_sucursal", 1), ("vencimiento", 1), ("_id", 1)], name="lotes_fefo")
+
 
 
 def _convertir(fila: dict) -> dict:

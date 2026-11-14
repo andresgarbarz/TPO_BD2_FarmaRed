@@ -33,8 +33,7 @@ def validar_cobertura(obra_social: str, nro_afiliado: str | None) -> None:
         raise Rechazo("la obra social exige número de afiliado")
 
 
-def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_receta: str | None, *, db=None, session=None):
-    """Revisa cliente, farmacéutico, sucursal, productos y receta. No escribe."""
+def validar_entrada_venta(id_cliente, id_farmaceutico, items, id_receta) -> None:
     validar_texto(id_cliente, "id_cliente")
     validar_texto(id_farmaceutico, "id_farmaceutico")
     if id_receta is not None:
@@ -50,6 +49,10 @@ def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_r
         if type(item["cantidad"]) is not int or item["cantidad"] <= 0:
             raise Rechazo("la cantidad tiene que ser un entero mayor a cero")
 
+
+def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_receta: str | None, *, db=None, session=None):
+    """Revisa cliente, farmacéutico, sucursal, productos y receta. No escribe."""
+    validar_entrada_venta(id_cliente, id_farmaceutico, items, id_receta)
     if db is None:
         db = base()
     cliente = db.clientes.find_one({"_id": id_cliente}, session=session)
