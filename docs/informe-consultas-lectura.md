@@ -83,13 +83,13 @@ Resultado resumido: `V013`, total $4.400; `V014`, total $4.600. Ambas Completada
 
 ## Q11 — vista agregada de ingresos del mes
 
-Código: [q11.py](../src/consultas/q11.py). La carga llama a `crear_vista()`, que crea o actualiza `ingresos_mensuales_farmaceutico` sobre `ventas`. La versión corregida selecciona Completada, agrupa por farmacéutico y `fecha`, y suma `total`. `ejecutar()` filtra el rango del mes de `hoy()` antes de sumar por farmacéutico, resuelve nombre, apellido y matrícula y ordena por id. El filtro se empuja hasta el índice de ventas, evitando recorrer todo el historial.
+Código: [q11.py](../src/consultas/q11.py). La carga llama a `crear_vista()`, que crea o actualiza `ingresos_mensuales_farmaceutico` sobre `ventas`. Su pipeline selecciona Completada, agrupa por farmacéutico, año y mes de `fecha` y suma `total`. `ejecutar()` filtra esa vista por el año y mes de `hoy()`, resuelve nombre, apellido y matrícula, y ordena por id.
 
-La materia presenta la creación y consulta de vistas y la agregación por grupos. La decisión de acumular por fecha y seleccionar luego el mes actual permite cambiar de período sin recrear la vista. El ingreso sale del total histórico de la venta; pendientes y anuladas no computan. Un farmacéutico hoy inactivo conserva sus ingresos históricos. [T13, pp. 50–52; T15, p. 33; P18, pp. 4–6]
+La materia presenta la creación y consulta de vistas y la agregación por grupos. La decisión de usar una vista mensual general más la selección del mes actual permite cambiar de período sin recrearla. El ingreso sale del total histórico de la venta; pendientes y anuladas no computan. Un farmacéutico hoy inactivo conserva sus ingresos históricos. [T13, pp. 50–52; T15, p. 33; P18, pp. 4–6]
 
 Las fechas del proyecto representan días civiles a medianoche, construidos con año, mes y día. Al extraer el período se conservan esos componentes, sin convertir otra vez la zona horaria. El mes actual sí se determina con `hoy()` en Argentina. Se usa `fecha`, no `fecha_registro`, conforme al contrato de Q15.
 
-La vista estándar calcula resultados al consultarse, sin persistir una copia de ingresos. Los campos `anio` y `mes` de salida corresponden al período elegido por `hoy()`.
+**Complemento del agente (no consta en el material cargado):** se usan `$year` y `$month` para extraer el período. La vista estándar calcula los resultados al consultarse, sin persistir una copia de los ingresos. Manual oficial de [`$year`](https://www.mongodb.com/docs/manual/reference/operator/aggregation/year/), [`$month`](https://www.mongodb.com/docs/manual/reference/operator/aggregation/month/) y [vistas](https://www.mongodb.com/docs/manual/core/views/).
 
 El 2026-11-10, con los CSV intactos, el resultado real es `[]`: no hay ventas de noviembre. Como control con reloj de prueba en octubre de 2026, se obtuvieron `F001: 4400`, `F002: 7800`, `F003: 7100`, `F005: 4600`. Una fila de ese control:
 
@@ -100,7 +100,7 @@ El 2026-11-10, con los CSV intactos, el resultado real es `[]`: no hay ventas de
 
 También se ejecutó Q15 sobre `V011` en una base de prueba con reloj en 2026-11-10: pasó a Completada, `fecha` pasó a noviembre y `fecha_registro` conservó 2026-10-12. Q11 mostró $4.800 para `F006` sin recrear la vista. Una segunda ejecución rechazada de Q15 no duplicó el ingreso.
 
-## Verificación histórica del 10 de noviembre
+## Verificación realizada
 
 Se inició MongoDB `8.3.11` en un contenedor aislado (`farmared-consultas-test`, `127.0.0.1:27018`), se ejecutó el cargador real y luego las seis consultas con el reloj del sistema. Los resultados coincidieron con los controles anteriores. El aviso de grafo pendiente es esperado: esa parte sigue sin implementar y estas lecturas usan MongoDB.
 

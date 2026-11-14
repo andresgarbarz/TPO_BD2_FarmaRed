@@ -34,7 +34,11 @@ class ReferenciaGrafo(Exception):
 
 @contextmanager
 def _driver():
-    driver = GraphDatabase.driver(NEO4J_URI)
+    driver = GraphDatabase.driver(
+        NEO4J_URI,
+        connection_timeout=3,
+        connection_acquisition_timeout=3,
+    )
     try:
         yield driver
     finally:
@@ -370,14 +374,6 @@ def _upsert_venta(tx, documento: dict) -> None:
         ).consume()
 
 
-_PROYECCIONES = {
-    "sucursales": _upsert_sucursal,
-    "farmaceuticos": _upsert_farmaceutico,
-    "productos": _upsert_producto,
-    "clientes": _upsert_cliente,
-    "recetas": _upsert_receta,
-    "ventas": _upsert_venta,
-}
 COLECCIONES_PENDIENTES = ("clientes", "recetas", "ventas")
 
 
@@ -386,12 +382,6 @@ def _limpiar_pendiente(nombre: str, documento: dict) -> None:
     filtro = {"_id": documento["_id"], "grafo_pendiente": True,
               "_version": documento["_version"]}
     base()[nombre].update_one(filtro, {"$set": {"grafo_pendiente": False}})
-
-
-def _proyectar_datos(tx, datos: dict[str, list[dict]]) -> None:
-    for nombre, funcion in _PROYECCIONES.items():
-        for documento in datos.get(nombre, []):
-            funcion(tx, documento)
 
 
 def upsert_cliente(documento: dict) -> None:
@@ -432,7 +422,18 @@ def upsert_venta_y_receta(documento: dict, receta: dict | None = None) -> None:
 
 def _reconstruir(tx, datos: dict[str, list[dict]]) -> None:
     tx.run("MATCH (n) DETACH DELETE n").consume()
-    _proyectar_datos(tx, datos)
+    for documento in datos["sucursales"]:
+        _upsert_sucursal(tx, documento)
+    for documento in datos["farmaceuticos"]:
+        _upsert_farmaceutico(tx, documento)
+    for documento in datos["productos"]:
+        _upsert_producto(tx, documento)
+    for documento in datos["clientes"]:
+        _upsert_cliente(tx, documento)
+    for documento in datos["recetas"]:
+        _upsert_receta(tx, documento)
+    for documento in datos["ventas"]:
+        _upsert_venta(tx, documento)
 
 
 def proyectar_todo() -> None:

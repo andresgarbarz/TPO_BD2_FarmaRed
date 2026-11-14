@@ -17,7 +17,7 @@ MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidade
 
 El devcontainer usa Python 3.12 y Docker. Al crearse instala las dependencias y levanta los dos motores. Las URIs están en `MONGO_URI` y `NEO4J_URI`. En el Codespace apuntan a `127.0.0.1`. Fuera de él, si no están definidas, el código usa el mismo localhost.
 
-MongoDB corre como replica set `rs0` de un nodo para las transacciones de Q14/Q15. Compose lo inicializa y espera que MongoDB sea PRIMARY y Neo4j responda por HTTP; al reabrir Codespaces vuelve a levantar los motores.
+MongoDB corre como replica set `rs0` de un nodo para las transacciones de Q14/Q15. Compose lo inicializa automáticamente; `docker compose up -d --wait` espera a que MongoDB sea PRIMARY.
 
 En Codespaces el arranque es automático. En una máquina propia, con el puerto 27017 libre:
 
@@ -36,7 +36,7 @@ Neo4j es `5.26.32`, el último parche de la serie 5.26 publicado en Docker Hub, 
 
 ## Carga
 
-`python3 scripts/cargar.py` borra las ocho colecciones y las vuelve a llenar desde los CSV. Convierte los CSV y verifica tipos, referencias, reglas de negocio y tamaño BSON antes del primer borrado. Los campos de texto vacíos se guardan como nulos; no se exigen datos de contacto para importar una fila. Se debe ejecutar sin escrituras concurrentes. Se puede correr dos veces: la segunda deja el mismo contenido que la primera. Una carga interrumpida queda marcada como incompleta y bloquea las lecturas del grafo hasta repetirla; si sólo falla Neo4j, el cargador termina con código 1 y se debe ejecutar `reconstruir()` cuando Neo4j esté disponible.
+`python3 scripts/cargar.py` borra las ocho colecciones y las vuelve a llenar desde los CSV. Verifica las referencias y la unicidad de DNI y matrícula, convierte los CSV y prepara los documentos antes del primer borrado. Los campos de texto vacíos se guardan como nulos; no se exigen datos de contacto para importar una fila. Se debe ejecutar sin escrituras concurrentes. Se puede correr dos veces: la segunda deja el mismo contenido que la primera. Una carga interrumpida queda marcada como incompleta y bloquea las lecturas del grafo hasta repetirla; si sólo falla Neo4j, el cargador termina con código 1 y se debe ejecutar `reconstruir()` cuando Neo4j esté disponible.
 
 Recargar borra lo creado con las consultas 13 y 14. Una venta que la consulta 15 pasó de Pendiente a Completada vuelve a Pendiente, con la fecha y los ítems del archivo.
 
@@ -48,11 +48,11 @@ PYTHONPATH=src python3 -c "from grafo import reconstruir; reconstruir()"
 
 Los ejemplos de las consultas 1 a 12 se sacan con una carga recién hecha, porque la 13, la 14 y la 15 cambian lo que esas consultas leen.
 
-La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de Q11. No guarda un mes fijo: acumula por farmacéutico y fecha; Q11 filtra el mes actual y suma esos acumulados. El filtro de fecha se aplica antes de agrupar, usando el índice de ventas. La carga también crea índices para ventas por farmacéutico/fecha, cliente/fecha, estado/fecha y para el orden FEFO de lotes.
+La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de Q11. No guarda un mes fijo: acumula por farmacéutico, año y mes; Q11 selecciona el mes actual.
 
 ### Colecciones
 
-`_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay índices únicos sobre `clientes.dni` y `farmaceuticos.matricula`. Los IDs C/V/D se reservan con contadores atómicos; la carga los inicializa desde los CSV. Al instalar esta versión se debe ejecutar el cargador; no hay migración automática de bases anteriores. `base()` reutiliza el pool MongoDB del proceso; `cliente()` permite crear conexiones propias y `cerrar()` libera el pool compartido.
+`_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay índices únicos sobre `clientes.dni` y `farmaceuticos.matricula`. Los IDs C/V/D se reservan con contadores atómicos; la carga los inicializa desde los CSV. Al instalar esta versión se debe ejecutar el cargador; no hay migración automática de bases anteriores.
 
 | Colección | Origen |
 |---|---|
@@ -89,7 +89,7 @@ Desde `src/`:
 python3 -m consultas
 ```
 
-Q13/Q14/Q15 rechazan identificadores de otros tipos, ítems incompletos y cantidades que no sean enteros positivos. Q13 rechaza una modificación de cobertura si otro proceso cambió la cobertura leída. Q14 rechaza una receta en ventas exclusivamente libres; una venta mixta usa una sola dispensa. Q15 rechaza una pendiente si el farmacéutico cambió de sucursal; para documentos antiguos sin `id_sucursal`, usa la sucursal actual.
+Q13/Q14/Q15 rechazan identificadores de otros tipos, ítems incompletos y cantidades que no sean enteros positivos. Q13 rechaza una modificación de cobertura si otro proceso cambió la cobertura leída. Q14 rechaza una receta en ventas exclusivamente libres; una venta mixta usa una sola dispensa. Q15 descuenta en la sucursal del farmacéutico asignado a la venta.
 
 Eso lista las quince consultas. Las que reciben parámetros son q03, q10, q13, q14 y q15. Q14 y Q15 confirman stock, receta, IDs y venta en una única transacción MongoDB; los rechazos y errores abortan los cambios y los conflictos transitorios reintentan la transacción completa. La proyección Neo4j se ejecuta después del commit.
 

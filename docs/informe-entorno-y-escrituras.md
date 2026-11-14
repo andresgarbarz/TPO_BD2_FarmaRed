@@ -63,7 +63,7 @@ El plan FEFO lee los lotes con `vencimiento` mayor o igual a `hoy()`, ordenados 
 
 La implementación posterior a la auditoría confirma lotes, receta, contadores y venta en una transacción MongoDB. El entorno inicia automáticamente un replica set `rs0` de un nodo. Un rechazo o error de escritura aborta todos los cambios; los conflictos transitorios reintentan la transacción. La proyección Neo4j se realiza después del commit. Ya no se restauran snapshots de recetas ni se reponen lotes por compensación.
 
-Q15 lee y completa la venta dentro de la transacción, de modo que dos llamadas simultáneas no consumen dos dispensas. Conserva su sucursal histórica y rechaza la operación si el farmacéutico fue reasignado. Los documentos antiguos sin sucursal usan la actual. Q14 rechaza una receta en ventas exclusivamente libres y valida cantidades enteras positivas antes de escribir. Estas decisiones del proyecto mantienen las reglas de venta, stock e integración. [P18, pp. 4–7]
+Q15 lee y completa la venta dentro de la transacción, de modo que dos llamadas simultáneas no consumen dos dispensas. Descuenta en la sucursal actual del farmacéutico y la guarda en la venta completada. Q14 rechaza una receta en ventas exclusivamente libres y valida cantidades enteras positivas antes de escribir. Estas decisiones del proyecto mantienen las reglas de venta, stock e integración. [P18, pp. 4–7]
 
 Los correlativos C/V/D usan contadores atómicos, inicializados por la carga. No se migran bases anteriores automáticamente. Q13 modifica la cobertura sólo si sigue siendo la que validó. DNI y matrícula se protegen con índices únicos.
 
