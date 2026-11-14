@@ -69,6 +69,7 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
             "medio_pago": medio_pago,
             "total": sum(item["cantidad"] * item["precio_unit"] for item in armados),
             "estado": "Completada",
+            "_version": 1,
             "items": armados,
         }
         _insertar_venta(documento, db=db, session=session)

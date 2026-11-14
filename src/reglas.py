@@ -123,7 +123,7 @@ def aplicar_receta(receta: dict, fecha, *, db, session) -> None:
     nuevo = estado_receta(receta, fecha)
     resultado = db.recetas.update_one(
         {"_id": receta["_id"], "dispensas_realizadas": receta["dispensas_realizadas"]},
-        {"$set": nuevo},
+        {"$set": nuevo, "$inc": {"_version": 1}},
         session=session,
     )
     if resultado.matched_count != 1:

@@ -112,7 +112,8 @@ def ejecutar(id_venta: str) -> dict:
             {"_id": id_venta, "estado": "Pendiente"},
             {"$set": {"estado": "Completada", "fecha": fecha,
                       "fecha_registro": venta["fecha"],
-                      "id_sucursal": contexto["sucursal"]["_id"], "items": items}},
+                      "id_sucursal": contexto["sucursal"]["_id"], "items": items},
+             "$inc": {"_version": 1}},
             session=session,
         )
         if resultado.matched_count != 1:

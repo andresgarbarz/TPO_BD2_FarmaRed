@@ -159,7 +159,25 @@ def _upsert_producto(tx, documento: dict) -> None:
     ).consume()
 
 
+def _aceptar_version(tx, etiqueta: str, documento: dict) -> bool:
+    # Leer y escribir la misma propiedad toma el lock antes de comparar versiones.
+    return tx.run(
+        f"""
+        MERGE (n:{etiqueta} {{id: $id}})
+        SET n._version = coalesce(n._version, 0)
+        WITH n
+        WHERE n._version <= $version
+        SET n._version = $version
+        RETURN n.id AS id
+        """,
+        id=documento.get("_id") or documento["id_venta"],
+        version=documento.get("_version", 0),
+    ).single() is not None
+
+
 def _upsert_cliente(tx, documento: dict) -> None:
+    if not _aceptar_version(tx, "Cliente", documento):
+        return
     tx.run(
         """
         MERGE (c:Cliente {id: $id})
@@ -190,6 +208,8 @@ def _upsert_cliente(tx, documento: dict) -> None:
 
 def _upsert_receta(tx, documento: dict) -> None:
     _exigir(tx, "Cliente", [documento["id_cliente"]])
+    if not _aceptar_version(tx, "Receta", documento):
+        return
     tx.run(
         """
         MERGE (r:Receta {id: $id})
@@ -246,6 +266,8 @@ def _upsert_venta(tx, documento: dict) -> None:
     id_receta = documento.get("id_receta")
     id_sucursal = documento.get("id_sucursal")
     items = _items_detalle(documento.get("items", []))
+    if not _aceptar_version(tx, "Venta", documento):
+        return
 
     _exigir(tx, "Cliente", [id_cliente])
     _exigir(tx, "Farmaceutico", [id_farmaceutico])

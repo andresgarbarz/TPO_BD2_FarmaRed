@@ -23,6 +23,7 @@ Valor de retorno:
     describe el motivo. El id del alta lo genera el servicio.
 """
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from db import base
@@ -73,6 +74,7 @@ def alta(**datos) -> dict:
     documento = {campo: datos[campo] for campo in ALTA}
     documento["nro_afiliado"] = nro
     documento["activo"] = True
+    documento["_version"] = 1
     try:
         _insertar(documento)
     except Rechazo as rechazo:
@@ -113,8 +115,11 @@ def modificar(id_cliente: str, **datos) -> dict:
     cambios = dict(datos)
     if "nro_afiliado" in cambios:
         cambios["nro_afiliado"] = nro
-    clientes.update_one({"_id": id_cliente}, {"$set": cambios})
-    return _proyectar(clientes.find_one({"_id": id_cliente}))
+    documento = clientes.find_one_and_update(
+        {"_id": id_cliente}, {"$set": cambios, "$inc": {"_version": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    return _proyectar(documento)
 
 
 def baja(id_cliente: str) -> dict:
@@ -123,10 +128,13 @@ def baja(id_cliente: str) -> dict:
     except Rechazo as rechazo:
         return {"ok": False, "error": rechazo.mensaje}
     clientes = base().clientes
-    resultado = clientes.update_one({"_id": id_cliente}, {"$set": {"activo": False}})
-    if resultado.matched_count != 1:
+    documento = clientes.find_one_and_update(
+        {"_id": id_cliente}, {"$set": {"activo": False}, "$inc": {"_version": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if documento is None:
         return {"ok": False, "error": "el cliente no existe"}
-    return _proyectar(clientes.find_one({"_id": id_cliente}))
+    return _proyectar(documento)
 
 
 def _vacio(valor):
