@@ -46,7 +46,7 @@ def validar_entrada_venta(id_cliente, id_farmaceutico, items, id_receta) -> None
         if not isinstance(item, dict) or "id_producto" not in item or "cantidad" not in item:
             raise Rechazo("cada ítem necesita id_producto y cantidad")
         validar_texto(item["id_producto"], "id_producto")
-        if type(item["cantidad"]) is not int or item["cantidad"] <= 0:
+        if type(item["cantidad"]) is not int or not 0 < item["cantidad"] < 2 ** 63:
             raise Rechazo("la cantidad tiene que ser un entero mayor a cero")
 
 

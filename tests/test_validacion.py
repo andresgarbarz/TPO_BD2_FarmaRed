@@ -75,9 +75,14 @@ class ValidacionEntradas(unittest.TestCase):
                 self.rechaza_sin_escribir(self.venta(items=items))
 
     def test_cantidad_debe_ser_entera_positiva(self):
-        for cantidad in (1.5, float("nan"), float("inf"), True, False, "1", None, [], 0, -1):
+        for cantidad in (1.5, float("nan"), float("inf"), True, False, "1", None, [], 0, -1, 2 ** 63):
             with self.subTest(cantidad=cantidad):
                 self.rechaza_sin_escribir(self.venta(items=[{"id_producto": "PRD001", "cantidad": cantidad}]))
+
+    def test_total_fuera_de_rango_se_rechaza_sin_cambios(self):
+        self.db.productos.update_one({"_id": "PRD001"}, {"$set": {"precio_unit": 2 ** 62}})
+        self.antes = self.estado()
+        self.rechaza_sin_escribir(self.venta(items=[{"id_producto": "PRD001", "cantidad": 2}]))
 
     def test_cliente_y_contacto_necesitan_textos(self):
         datos = {"nombre": "Ana", "apellido": "Prueba", "dni": "30111222",

@@ -58,6 +58,9 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
         armados = [{"id_producto": item["id_producto"], "cantidad": item["cantidad"],
                     "precio_unit": contexto["productos"][item["id_producto"]]["precio_unit"]}
                    for item in items]
+        total = sum(item["cantidad"] * item["precio_unit"] for item in armados)
+        if not 0 <= total < 2 ** 63:
+            raise Rechazo("el total de la venta excede el rango admitido")
         armados = descontar(contexto["sucursal"]["_id"], armados, db=db, session=session)
         if contexto["receta"] is not None:
             aplicar_receta(contexto["receta"], fecha, db=db, session=session)
@@ -73,7 +76,7 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
             "fecha": fecha,
             "tipo": "Con receta" if contexto["pide_receta"] else "Venta libre",
             "medio_pago": medio_pago,
-            "total": sum(item["cantidad"] * item["precio_unit"] for item in armados),
+            "total": total,
             "estado": "Completada",
             "_version": 1,
             "grafo_pendiente": True,
