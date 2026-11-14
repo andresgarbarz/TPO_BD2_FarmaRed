@@ -61,17 +61,15 @@ Las dos tienen que quedar integradas: si el descuento falla, no pueden quedar un
 
 El plan FEFO lee los lotes con `vencimiento` mayor o igual a `hoy()`, ordenados por `{vencimiento: 1, _id: 1}`. El día de vencimiento todavía se vende. El `sort` de MongoDB no es estable, y `_id` es el id del lote, así que dos lotes que vencen el mismo día salen siempre en el mismo orden. Si dos ítems piden el mismo producto, el plan descuenta en memoria lo ya asignado para no usar dos veces las mismas unidades.
 
-Si el plan no alcanza, se rechaza antes de escribir. Si alcanza, cada lote se baja con la condición `unidades` mayor o igual a lo que se toma. Si un lote ya no alcanza, se reponen los que sí se habían bajado y se rechaza.
+La implementación posterior a la auditoría confirma lotes, receta, contadores y venta en una transacción MongoDB. El entorno inicia automáticamente un replica set `rs0` de un nodo. Un rechazo o error de escritura aborta todos los cambios; los conflictos transitorios reintentan la transacción. La proyección Neo4j se realiza después del commit. Ya no se restauran snapshots de recetas ni se reponen lotes por compensación.
 
-La receta se actualiza con la condición de que `dispensas_realizadas` siga valiendo lo que se leyó. En un tratamiento prolongado, si todavía quedan dispensas, la próxima es la fecha de la dispensa más 30 días; al llegar a las autorizadas pasa a Completada y la próxima queda vacía. Una receta simple se completa en esa única dispensa [P18, p. 5]. Si la condición no coincide, se reponen los lotes y no se graba ni se completa la venta.
+Q15 lee y completa la venta dentro de la transacción, de modo que dos llamadas simultáneas no consumen dos dispensas. Conserva su sucursal histórica y rechaza la operación si el farmacéutico fue reasignado. Los documentos antiguos sin sucursal usan la actual. Q14 rechaza una receta en ventas exclusivamente libres y valida cantidades enteras positivas antes de escribir. Estas decisiones del proyecto mantienen las reglas de venta, stock e integración. [P18, pp. 4–7]
 
-La 14 inserta la venta después del descuento y de la receta. Si no puede asignar el id, repone las dos cosas: no queda la venta. La 15 pasa a Completada con la condición `estado: "Pendiente"`. Una segunda llamada no encuentra la venta en ese estado, así que no vuelve a descontar. No hace falta un campo `stock_descontado`. Si esa condición no coincide, se reponen los lotes y la receta.
+Los correlativos C/V/D usan contadores atómicos, inicializados por la carga o migrados una vez en bases anteriores. Q13 modifica la cobertura sólo si sigue siendo la que validó. DNI y matrícula se protegen con índices únicos.
 
-No se usan transacciones de varios documentos. En MongoDB esas transacciones piden un replica set, y este entorno es una sola instancia. La estrategia es el orden de las operaciones, la actualización condicional y la reposición.
+Las escrituras de clientes, recetas y ventas incrementan `_version` y marcan `grafo_pendiente` en la misma operación. Neo4j descarta proyecciones anteriores a su versión actual; la confirmación limpia sólo la versión correspondiente. Q02/Q03/Q10 recuperan pendientes antes de consultar y fallan explícitamente si no pueden actualizar el grafo. Una reconstrucción completa tiene un marcador persistente; una carga incompleta exige repetir el cargador. Ver [informe-grafo.md](informe-grafo.md).
 
-Cada ítem descontado guarda `lotes: [{id_lote, unidades}]`. Las ventas que vienen del CSV no lo traen. La venta también guarda `id_sucursal`, la sucursal del farmacéutico que la registró; las ventas del CSV lo reciben al cargarse.
-
-Si la proyección a Neo4j falla, Mongo ya confirmó. La consulta responde bien y agrega `aviso_grafo`: el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. La 14 y la 15 proyectan la venta y su receta con `upsert_venta_y_receta`, en una sola transacción, para que el grafo no quede con una mitad actualizada. El detalle del grafo y de q02, q03 y q10 está en [informe-grafo.md](informe-grafo.md).
+La carga valida y convierte todos los CSV y prepara los documentos completos antes del primer borrado. Sigue siendo una operación de reinicio que debe correr sin escrituras concurrentes. Los ejemplos anteriores conservan sus fechas y resultados históricos.
 
 ## Limitación y supuestos
 
