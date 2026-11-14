@@ -17,6 +17,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "src"))
 
+from bson import BSON  # noqa: E402
 from pymongo.errors import ServerSelectionTimeoutError  # noqa: E402
 
 from db import COLECCIONES, base, fecha_de_partes  # noqa: E402
@@ -84,7 +85,6 @@ class CargaInvalida(Exception):
 def main() -> int:
     try:
         tablas = _leer_todo()
-        _validar(tablas)
         _escribir(tablas)
     except CargaInvalida as error:
         print(error)
@@ -129,102 +129,145 @@ def _leer(ruta: Path, nombre: str, exigir: bool) -> list[dict]:
         return list(lector)
 
 
-def _validar(tablas: dict) -> None:
-    ids: dict[str, set[str]] = {}
-    for nombre, partes in tablas.items():
-        campo = ID_CAMPO[nombre]
-        catedra = {fila[campo] for fila in partes["catedra"]}
-        propios = []
-        for fila in partes["propios"]:
-            identificador = fila[campo]
-            if identificador in catedra or identificador in propios:
-                raise CargaInvalida(
-                    f"datasets/extra/{nombre}: {identificador} repite un id de la cátedra o del propio archivo"
-                )
-            propios.append(identificador)
-        ids[nombre] = catedra | set(propios)
+DOMINIOS = {
+    "clientes.csv": {"obra_social": {"OSDE", "Swiss Medical", "PAMI", "IOMA", "Galeno", "Sin cobertura"}},
+    "sucursales.csv": {"tipo": {"Farmacia", "Droguería"}},
+    "farmaceuticos.csv": {"cargo": {"Director Técnico", "Farmacéutico"}},
+    "proveedores.csv": {"tipo": {"Laboratorio", "Droguería"}},
+    "productos.csv": {"condicion_venta": {"Venta libre", "Bajo receta", "Bajo receta archivada"}},
+    "recetas.csv": {"tipo": {"Simple", "Archivada", "Tratamiento prolongado"},
+                    "estado": {"Vigente", "Completada", "Vencida"}},
+    "ventas.csv": {"tipo": {"Venta libre", "Con receta"},
+                   "estado": {"Completada", "Pendiente", "Anulada"},
+                   "medio_pago": {"Efectivo", "Débito", "Crédito", "Transferencia", "Obra social"}},
+}
 
+
+def _validar(tablas: dict) -> dict:
+    """Convierte y valida todas las filas sin escribir ni modificar la entrada."""
+    if not isinstance(tablas, dict) or set(tablas) != set(ARCHIVOS):
+        raise CargaInvalida("la carga debe incluir los nueve archivos esperados")
+    convertidas = {}
+    ids = {}
+    for nombre, partes in tablas.items():
+        if not isinstance(partes, dict) or set(partes) != {"catedra", "propios"}:
+            raise CargaInvalida(f"{nombre}: faltan las partes catedra y propios")
+        convertidas[nombre] = {}
+        ids[nombre] = set()
+        for origen in ("catedra", "propios"):
+            if not isinstance(partes[origen], list):
+                raise CargaInvalida(f"{nombre}: {origen} debe ser una lista de filas")
+            convertidas[nombre][origen] = []
+            for numero, fila in enumerate(partes[origen], 1):
+                contexto = f"{nombre} ({origen}, fila {numero})"
+                if (not isinstance(fila, dict) or set(fila) != set(COLUMNAS[nombre])
+                        or any(not isinstance(valor, str) for valor in fila.values())):
+                    raise CargaInvalida(f"{contexto}: columnas o valores inválidos")
+                if any(not valor.strip() for campo, valor in fila.items() if campo not in OPCIONALES):
+                    raise CargaInvalida(f"{contexto}: falta un campo obligatorio")
+                try:
+                    documento = _convertir(fila)
+                except (ValueError, TypeError, OverflowError) as error:
+                    raise CargaInvalida(f"{contexto}: {error}") from error
+                identificador = documento[ID_CAMPO[nombre]]
+                if identificador in ids[nombre]:
+                    raise CargaInvalida(f"{contexto}: el id {identificador} está repetido")
+                ids[nombre].add(identificador)
+                for campo, dominio in DOMINIOS.get(nombre, {}).items():
+                    if documento[campo] not in dominio:
+                        raise CargaInvalida(f"{contexto}: {campo} fuera de dominio")
+                for campo in ENTEROS.intersection(documento):
+                    minimo = 1 if campo in {"cantidad", "dispensas_autorizadas"} else 0
+                    if documento[campo] < minimo:
+                        raise CargaInvalida(f"{contexto}: {campo} debe ser al menos {minimo}")
+                convertidas[nombre][origen].append(documento)
+
+    filas = {nombre: partes["catedra"] + partes["propios"]
+             for nombre, partes in convertidas.items()}
     for nombre, reglas in REFERENCIAS.items():
-        for fila in tablas[nombre]["catedra"] + tablas[nombre]["propios"]:
+        for fila in filas[nombre]:
             for campo, destino in reglas:
                 valor = fila[campo]
-                if campo in OPCIONALES and valor == "":
+                if campo in OPCIONALES and valor is None:
                     continue
                 if valor not in ids[destino]:
-                    raise CargaInvalida(
-                        f"{nombre} {fila[ID_CAMPO[nombre]]}: {campo} {valor} no existe"
-                    )
+                    raise CargaInvalida(f"{nombre} {fila[ID_CAMPO[nombre]]}: {campo} {valor} no existe")
 
-    dnis = []
-    for fila in tablas["clientes.csv"]["catedra"] + tablas["clientes.csv"]["propios"]:
-        if fila["dni"] == "":
-            raise CargaInvalida(f"clientes {fila['id_cliente']}: falta el DNI")
+    dnis = set()
+    for fila in filas["clientes.csv"]:
         if fila["dni"] in dnis:
             raise CargaInvalida(f"clientes: el DNI {fila['dni']} está repetido")
-        dnis.append(fila["dni"])
+        dnis.add(fila["dni"])
+        if (fila["obra_social"] == "Sin cobertura") != (fila["nro_afiliado"] is None):
+            raise CargaInvalida(f"clientes {fila['id_cliente']}: cobertura y afiliado incompatibles")
 
-    sumas: dict[str, int] = {}
-    for fila in tablas["detalle_ventas.csv"]["catedra"] + tablas["detalle_ventas.csv"]["propios"]:
-        sumas[fila["id_venta"]] = sumas.get(fila["id_venta"], 0) + int(fila["cantidad"]) * int(fila["precio_unit"])
-    for fila in tablas["ventas.csv"]["catedra"] + tablas["ventas.csv"]["propios"]:
-        total = int(fila["total"])
-        suma = sumas.get(fila["id_venta"], 0)
-        if total != suma:
-            raise CargaInvalida(
-                f"ventas {fila['id_venta']}: el total {total} no coincide con la suma de los ítems {suma}"
-            )
+    for fila in filas["recetas.csv"]:
+        autorizadas, hechas = fila["dispensas_autorizadas"], fila["dispensas_realizadas"]
+        maximo = 3 if fila["tipo"] == "Tratamiento prolongado" else 1
+        if autorizadas > maximo or hechas > autorizadas:
+            raise CargaInvalida(f"recetas {fila['id_receta']}: cantidad de dispensas inválida")
+        if ((fila["estado"] == "Completada" and hechas != autorizadas)
+                or (fila["estado"] == "Vigente" and hechas == autorizadas)):
+            raise CargaInvalida(f"recetas {fila['id_receta']}: estado incompatible con las dispensas")
+        proxima = fila["proxima_dispensa"]
+        if proxima is not None and (fila["tipo"] != "Tratamiento prolongado"
+                or fila["estado"] == "Completada" or proxima < fila["fecha_emision"]):
+            raise CargaInvalida(f"recetas {fila['id_receta']}: próxima dispensa incompatible")
+
+    recetas = {r["id_receta"]: r for r in filas["recetas.csv"]}
+    farmaceuticos = {f["id_farmaceutico"]: f for f in filas["farmaceuticos.csv"]}
+    sucursales = {s["id_sucursal"]: s for s in filas["sucursales.csv"]}
+    sumas = {}
+    for fila in filas["detalle_ventas.csv"]:
+        sumas[fila["id_venta"]] = sumas.get(fila["id_venta"], 0) + fila["cantidad"] * fila["precio_unit"]
+    for fila in filas["ventas.csv"]:
+        if fila["id_venta"] not in sumas or fila["total"] != sumas[fila["id_venta"]]:
+            raise CargaInvalida(f"ventas {fila['id_venta']}: el total no coincide con sus ítems")
+        receta = recetas.get(fila["id_receta"])
+        if ((fila["tipo"] == "Venta libre") != (receta is None)
+                or (receta is not None and receta["id_cliente"] != fila["id_cliente"])):
+            raise CargaInvalida(f"ventas {fila['id_venta']}: tipo, receta o cliente incompatibles")
+        sucursal = sucursales[farmaceuticos[fila["id_farmaceutico"]]["id_sucursal"]]
+        if sucursal["tipo"] != "Farmacia":
+            raise CargaInvalida(f"ventas {fila['id_venta']}: la sucursal no es una Farmacia")
+    return convertidas
 
 
 def _escribir(tablas: dict) -> None:
+    tablas = _validar(tablas)
+    documentos = {}
+    for nombre, coleccion in ARCHIVOS.items():
+        campo = ID_CAMPO[nombre]
+        documentos[coleccion] = [dict(fila, _id=fila[campo])
+                                for origen in ("catedra", "propios")
+                                for fila in tablas[nombre][origen]]
+    sucursal_de = {f["_id"]: f["id_sucursal"] for f in documentos["farmaceuticos"]}
+    detalles = {}
+    for detalle in documentos.pop("detalle_ventas"):
+        detalle.pop("_id")
+        id_venta = detalle.pop("id_venta")
+        detalles.setdefault(id_venta, []).append(detalle)
+    for venta in documentos["ventas"]:
+        venta["id_sucursal"] = sucursal_de[venta["id_farmaceutico"]]
+        venta["items"] = detalles[venta["_id"]]
+    for coleccion, filas in documentos.items():
+        for documento in filas:
+            if len(BSON.encode(documento)) > 16 * 1024 * 1024:
+                raise CargaInvalida(f"{coleccion} {documento['_id']}: supera el tamaño máximo BSON")
+
     db = base()
     for coleccion in COLECCIONES:
         db[coleccion].drop()
-
     for nombre, coleccion in ARCHIVOS.items():
         if coleccion == "detalle_ventas":
             continue
-        campo = ID_CAMPO[nombre]
-        documentos = []
-        for origen in ("catedra", "propios"):
-            for fila in tablas[nombre][origen]:
-                documento = _convertir(fila)
-                documento["_id"] = documento[campo]
-                documentos.append(documento)
-        if documentos:
-            db[coleccion].insert_many(documentos)
-        print(
-            f"{coleccion}: {len(tablas[nombre]['catedra'])} de la cátedra, "
-            f"{len(tablas[nombre]['propios'])} propios"
-        )
-
-    sucursal_de = {
-        documento["_id"]: documento["id_sucursal"]
-        for documento in db.farmaceuticos.find({}, {"id_sucursal": 1})
-    }
-    for venta in list(
-        db.ventas.find({}, {"id_farmaceutico": 1, "id_sucursal": 1})
-    ):
-        if not venta.get("id_sucursal"):
-            id_sucursal = sucursal_de.get(venta["id_farmaceutico"])
-            if id_sucursal:
-                db.ventas.update_one(
-                    {"_id": venta["_id"]}, {"$set": {"id_sucursal": id_sucursal}}
-                )
-
-    detalles: dict[str, list[dict]] = {}
-    for origen in ("catedra", "propios"):
-        for fila in tablas["detalle_ventas.csv"][origen]:
-            item = _convertir(fila)
-            item.pop("id_venta")
-            detalles.setdefault(fila["id_venta"], []).append(item)
-    db.ventas.update_many({}, {"$set": {"items": []}})
-    for id_venta, items in detalles.items():
-        db.ventas.update_one({"_id": id_venta}, {"$set": {"items": items}})
-    print(
-        "detalle_ventas: "
-        f"{len(tablas['detalle_ventas.csv']['catedra'])} de la cátedra, "
-        f"{len(tablas['detalle_ventas.csv']['propios'])} propios, embebidos en ventas"
-    )
+        if documentos[coleccion]:
+            db[coleccion].insert_many(documentos[coleccion])
+        print(f"{coleccion}: {len(tablas[nombre]['catedra'])} de la cátedra, "
+              f"{len(tablas[nombre]['propios'])} propios")
+    print("detalle_ventas: "
+          f"{len(tablas['detalle_ventas.csv']['catedra'])} de la cátedra, "
+          f"{len(tablas['detalle_ventas.csv']['propios'])} propios, embebidos en ventas")
     db.clientes.create_index("dni", unique=True, name="dni_unico")
     crear_vista()
 
@@ -235,11 +278,22 @@ def _convertir(fila: dict) -> dict:
         if campo in OPCIONALES and valor == "":
             documento[campo] = None
         elif campo == "activo":
+            if valor not in {"True", "False"}:
+                raise ValueError("activo debe ser True o False")
             documento[campo] = valor == "True"
         elif campo in ENTEROS:
-            documento[campo] = int(valor)
+            entero = int(valor)
+            if not -(2 ** 63) <= entero < 2 ** 63:
+                raise ValueError(f"{campo} excede el rango de enteros BSON")
+            documento[campo] = entero
         elif campo in FECHAS:
-            documento[campo] = None if valor == "" else fecha_de_partes(valor)
+            if valor == "":
+                documento[campo] = None
+            else:
+                fecha = fecha_de_partes(valor)
+                if valor != f"{fecha.year:04d}-{fecha.month:02d}-{fecha.day:02d}":
+                    raise ValueError(f"{campo} debe usar AAAA-MM-DD")
+                documento[campo] = fecha
         else:
             documento[campo] = valor
     return documento
