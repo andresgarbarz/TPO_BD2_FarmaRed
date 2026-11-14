@@ -201,6 +201,12 @@ def _validar(tablas: dict) -> dict:
         if (fila["obra_social"] == "Sin cobertura") != (fila["nro_afiliado"] is None):
             raise CargaInvalida(f"clientes {fila['id_cliente']}: cobertura y afiliado incompatibles")
 
+    matriculas = set()
+    for fila in filas["farmaceuticos.csv"]:
+        if fila["matricula"] in matriculas:
+            raise CargaInvalida(f"farmaceuticos: la matrícula {fila['matricula']} está repetida")
+        matriculas.add(fila["matricula"])
+
     for fila in filas["recetas.csv"]:
         autorizadas, hechas = fila["dispensas_autorizadas"], fila["dispensas_realizadas"]
         maximo = 3 if fila["tipo"] == "Tratamiento prolongado" else 1
@@ -269,6 +275,7 @@ def _escribir(tablas: dict) -> None:
           f"{len(tablas['detalle_ventas.csv']['catedra'])} de la cátedra, "
           f"{len(tablas['detalle_ventas.csv']['propios'])} propios, embebidos en ventas")
     db.clientes.create_index("dni", unique=True, name="dni_unico")
+    db.farmaceuticos.create_index("matricula", unique=True, name="matricula_unica")
     crear_vista()
 
 
