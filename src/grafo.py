@@ -6,9 +6,10 @@ Las escrituras individuales de q13, q14 y q15 llaman a upsert_cliente,
 upsert_venta_y_receta y las proyecciones puntuales, que reemplazan las relaciones
 viejas para no duplicar ni conservar vínculos obsoletos.
 
-Si una proyección falla, la escritura en Mongo ya está confirmada: proyectar
-devuelve el aviso y no propaga el error. consultar expone una lectura Cypher
-parametrizada para q02, q03 y q10.
+Cada cambio confirmado en Mongo queda marcado hasta que Neo4j lo confirma.
+Si una proyección falla, proyectar devuelve el aviso y conserva el pendiente.
+consultar recupera los pendientes antes de leer; si no puede, rechaza la lectura.
+La carga conserva también el estado de su reconstrucción completa.
 """
 
 from contextlib import contextmanager
@@ -16,6 +17,7 @@ from datetime import date, datetime
 
 from neo4j import GraphDatabase
 from neo4j.exceptions import DriverError, Neo4jError
+from pymongo.errors import PyMongoError
 
 from db import NEO4J_URI, base
 
@@ -372,22 +374,83 @@ def _upsert_venta(tx, documento: dict) -> None:
         ).consume()
 
 
+_PROYECCIONES = {
+    "sucursales": _upsert_sucursal,
+    "farmaceuticos": _upsert_farmaceutico,
+    "productos": _upsert_producto,
+    "clientes": _upsert_cliente,
+    "recetas": _upsert_receta,
+    "ventas": _upsert_venta,
+}
+COLECCIONES_PENDIENTES = ("clientes", "recetas", "ventas")
+
+
+def _limpiar_pendiente(nombre: str, documento: dict) -> None:
+    # Una proyección vieja no confirma la actualización que llegó después.
+    version = documento.get("_version", 0)
+    filtro = {"_id": documento["_id"], "grafo_pendiente": True}
+    if version == 0:
+        filtro["$or"] = [{"_version": 0}, {"_version": {"$exists": False}}]
+    else:
+        filtro["_version"] = version
+    base()[nombre].update_one(filtro, {"$set": {"grafo_pendiente": False}})
+
+
+def _proyectar_datos(tx, datos: dict[str, list[dict]]) -> None:
+    for nombre, funcion in _PROYECCIONES.items():
+        for documento in datos.get(nombre, []):
+            funcion(tx, documento)
+
+
+def recuperar_pendientes() -> None:
+    """Reintenta lo confirmado en Mongo y aún no confirmado en el grafo.
+
+    Si entran cambios nuevos durante el intento, la lectura se rechaza para no
+    devolver datos que sabemos atrasados. El siguiente intento toma sus versiones.
+    """
+    try:
+        db = base()
+        if db["_estado_grafo"].find_one({"_id": "reconstruccion"}):
+            proyectar_todo()
+        datos = {nombre: list(db[nombre].find({"grafo_pendiente": True}))
+                 for nombre in COLECCIONES_PENDIENTES}
+        if not any(datos.values()):
+            if db["_estado_grafo"].find_one({"_id": "reconstruccion"}):
+                raise GrafoPendiente("hay una reconstrucción nueva pendiente")
+            return
+        with _sesion() as sesion:
+            _crear_constraints(sesion)
+            sesion.execute_write(_proyectar_datos, datos)
+        for nombre, documentos in datos.items():
+            for documento in documentos:
+                _limpiar_pendiente(nombre, documento)
+        if db["_estado_grafo"].find_one({"_id": "reconstruccion"}) or any(
+               db[nombre].find_one({"grafo_pendiente": True}, {"_id": 1})
+               for nombre in COLECCIONES_PENDIENTES):
+            raise GrafoPendiente("hay cambios nuevos pendientes de proyectar")
+    except (ReferenciaGrafo, Neo4jError, DriverError, OSError, PyMongoError) as error:
+        raise GrafoPendiente("no se pudo recuperar el grafo pendiente") from error
+
+
 def upsert_cliente(documento: dict) -> None:
     """Crea o actualiza el nodo del cliente."""
     with _sesion() as sesion:
         sesion.execute_write(_upsert_cliente, documento)
+    _limpiar_pendiente("clientes", documento)
 
 
 def upsert_venta(documento: dict) -> None:
     """Crea o actualiza la venta y sus relaciones."""
     with _sesion() as sesion:
         sesion.execute_write(_upsert_venta, documento)
+    _limpiar_pendiente("ventas", documento)
 
 
 def upsert_receta(documento: dict) -> None:
     """Crea o actualiza la receta y su relación con el cliente."""
     with _sesion() as sesion:
         sesion.execute_write(_upsert_receta, documento)
+    _limpiar_pendiente("recetas", documento)
 
 
 def upsert_venta_y_receta(documento: dict, receta: dict | None = None) -> None:
@@ -400,22 +463,14 @@ def upsert_venta_y_receta(documento: dict, receta: dict | None = None) -> None:
 
     with _sesion() as sesion:
         sesion.execute_write(escribir)
+    if receta is not None:
+        _limpiar_pendiente("recetas", receta)
+    _limpiar_pendiente("ventas", documento)
 
 
 def _reconstruir(tx, datos: dict[str, list[dict]]) -> None:
     tx.run("MATCH (n) DETACH DELETE n").consume()
-    for documento in datos["sucursales"]:
-        _upsert_sucursal(tx, documento)
-    for documento in datos["farmaceuticos"]:
-        _upsert_farmaceutico(tx, documento)
-    for documento in datos["productos"]:
-        _upsert_producto(tx, documento)
-    for documento in datos["clientes"]:
-        _upsert_cliente(tx, documento)
-    for documento in datos["recetas"]:
-        _upsert_receta(tx, documento)
-    for documento in datos["ventas"]:
-        _upsert_venta(tx, documento)
+    _proyectar_datos(tx, datos)
 
 
 def proyectar_todo() -> None:
@@ -425,6 +480,9 @@ def proyectar_todo() -> None:
     ejecutarse sin escrituras concurrentes en Mongo.
     """
     db = base()
+    reconstruccion = db["_estado_grafo"].find_one({"_id": "reconstruccion"})
+    if reconstruccion is not None and not reconstruccion.get("carga_lista"):
+        raise GrafoPendiente("carga incompleta: repetir scripts/cargar.py")
     farmaceuticos = list(db.farmaceuticos.find())
     sucursal_de = {f["_id"]: f["id_sucursal"] for f in farmaceuticos}
     ventas = list(db.ventas.find())
@@ -443,6 +501,11 @@ def proyectar_todo() -> None:
         with _sesion() as sesion:
             _crear_constraints(sesion)
             sesion.execute_write(_reconstruir, datos)
+        for nombre in COLECCIONES_PENDIENTES:
+            for documento in datos[nombre]:
+                _limpiar_pendiente(nombre, documento)
+        if reconstruccion is not None:
+            db["_estado_grafo"].delete_one(reconstruccion)
     except Exception as error:
         raise GrafoPendiente("no se pudo proyectar el grafo") from error
 
@@ -458,6 +521,7 @@ def consultar(cypher: str, **parametros) -> list[dict]:
     Si Neo4j no está disponible, levanta GrafoPendiente con un mensaje claro.
     """
     try:
+        recuperar_pendientes()
         with _sesion() as sesion:
             return sesion.execute_read(
                 lambda tx: [
@@ -472,6 +536,6 @@ def proyectar(funcion, *args) -> str | None:
     """Ejecuta una proyección. Si falla, devuelve el aviso y no propaga."""
     try:
         funcion(*args)
-    except (GrafoPendiente, ReferenciaGrafo, Neo4jError, DriverError, OSError):
+    except (GrafoPendiente, ReferenciaGrafo, Neo4jError, DriverError, OSError, PyMongoError):
         return "el grafo quedó pendiente"
     return None

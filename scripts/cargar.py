@@ -17,12 +17,12 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "src"))
 
-from bson import BSON  # noqa: E402
+from bson import BSON, ObjectId  # noqa: E402
 from pymongo.errors import ServerSelectionTimeoutError  # noqa: E402
 
 from db import COLECCIONES, base, fecha_de_partes  # noqa: E402
 from consultas.q11 import crear_vista  # noqa: E402
-from grafo import GrafoPendiente, proyectar_todo  # noqa: E402
+from grafo import COLECCIONES_PENDIENTES, GrafoPendiente, proyectar_todo  # noqa: E402
 from ids import desde_documentos, iniciar  # noqa: E402
 
 DATOS = RAIZ / "datasets"
@@ -98,8 +98,10 @@ def main() -> int:
         proyectar_todo()
     except GrafoPendiente:
         print("Grafo pendiente: no se pudo proyectar. Se rehace con reconstruir().")
+        return 1
     except Exception:
         print("Grafo pendiente: la proyección falló y se rehace con reconstruir().")
+        return 1
     print("Carga lista.")
     return 0
 
@@ -259,6 +261,8 @@ def _escribir(tablas: dict) -> None:
         venta["items"] = detalles[venta["_id"]]
     for coleccion, filas in documentos.items():
         for documento in filas:
+            if coleccion in COLECCIONES_PENDIENTES:
+                documento.update({"_version": 0, "grafo_pendiente": True})
             if len(BSON.encode(documento)) > 16 * 1024 * 1024:
                 raise CargaInvalida(f"{coleccion} {documento['_id']}: supera el tamaño máximo BSON")
 
@@ -268,6 +272,8 @@ def _escribir(tablas: dict) -> None:
         raise CargaInvalida(str(error)) from error
 
     db = base()
+    estado = {"_id": "reconstruccion", "generacion": ObjectId(), "carga_lista": False}
+    db["_estado_grafo"].replace_one({"_id": "reconstruccion"}, estado, upsert=True)
     for coleccion in COLECCIONES:
         db[coleccion].drop()
     for nombre, coleccion in ARCHIVOS.items():
@@ -283,6 +289,12 @@ def _escribir(tablas: dict) -> None:
     crear_indices()
     iniciar(db, secuencias)
     crear_vista()
+    resultado = db["_estado_grafo"].update_one(
+        {"_id": "reconstruccion", "generacion": estado["generacion"]},
+        {"$set": {"carga_lista": True}},
+    )
+    if resultado.matched_count != 1:
+        raise CargaInvalida("otra carga reemplazó la reconstrucción en curso")
 
 
 def crear_indices() -> None:
@@ -295,6 +307,9 @@ def crear_indices() -> None:
     db.ventas.create_index([("estado", 1), ("fecha", 1)], name="ventas_estado_fecha")
     db.stock_lotes.create_index(
         [("id_producto", 1), ("id_sucursal", 1), ("vencimiento", 1), ("_id", 1)], name="lotes_fefo")
+
+    for nombre in COLECCIONES_PENDIENTES:
+        db[nombre].create_index("grafo_pendiente")
 
 
 

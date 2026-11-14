@@ -76,6 +76,7 @@ def alta(**datos) -> dict:
     documento["nro_afiliado"] = nro
     documento["activo"] = True
     documento["_version"] = 1
+    documento["grafo_pendiente"] = True
     try:
         _insertar(documento)
     except Rechazo as rechazo:
@@ -113,7 +114,7 @@ def modificar(id_cliente: str, **datos) -> dict:
     except Rechazo as rechazo:
         return {"ok": False, "error": rechazo.mensaje}
 
-    cambios = dict(datos)
+    cambios = {**datos, "grafo_pendiente": True}
     if "nro_afiliado" in cambios:
         cambios["nro_afiliado"] = nro
     documento = clientes.find_one_and_update(
@@ -134,7 +135,7 @@ def baja(id_cliente: str) -> dict:
         return {"ok": False, "error": rechazo.mensaje}
     clientes = base().clientes
     documento = clientes.find_one_and_update(
-        {"_id": id_cliente}, {"$set": {"activo": False}, "$inc": {"_version": 1}},
+        {"_id": id_cliente}, {"$set": {"activo": False, "grafo_pendiente": True}, "$inc": {"_version": 1}},
         return_document=ReturnDocument.AFTER,
     )
     if documento is None:

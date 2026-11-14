@@ -125,7 +125,7 @@ def estado_receta(receta: dict, fecha) -> dict:
 
 def aplicar_receta(receta: dict, fecha, *, db, session) -> None:
     """Actualiza la receta dentro de la misma transacción que la venta y el stock."""
-    nuevo = estado_receta(receta, fecha)
+    nuevo = {**estado_receta(receta, fecha), "grafo_pendiente": True}
     resultado = db.recetas.update_one(
         {"_id": receta["_id"], "dispensas_realizadas": receta["dispensas_realizadas"]},
         {"$set": nuevo, "$inc": {"_version": 1}},

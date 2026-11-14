@@ -111,7 +111,7 @@ def ejecutar(id_venta: str) -> dict:
         resultado = db.ventas.update_one(
             {"_id": id_venta, "estado": "Pendiente"},
             {"$set": {"estado": "Completada", "fecha": fecha,
-                      "fecha_registro": venta["fecha"],
+                      "fecha_registro": venta["fecha"], "grafo_pendiente": True,
                       "id_sucursal": contexto["sucursal"]["_id"], "items": items},
              "$inc": {"_version": 1}},
             session=session,
