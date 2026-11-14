@@ -6,7 +6,8 @@ pierde, y una venta que la 15 pasó a Completada vuelve a Pendiente.
 
 Lee datasets/ y, si existe, datasets/extra/ con los mismos nombres y encabezados.
 Los id propios no pueden repetir uno de la cátedra. Las referencias tienen que
-existir y el total de cada venta tiene que coincidir con sus ítems.
+existir y el total de cada venta tiene que coincidir con sus ítems. A cada venta
+se le agrega el id_sucursal del farmacéutico para conservar la sucursal histórica.
 """
 
 import csv
@@ -20,7 +21,7 @@ from pymongo.errors import ServerSelectionTimeoutError  # noqa: E402
 
 from db import COLECCIONES, base, fecha_de_partes  # noqa: E402
 from consultas.q11 import crear_vista  # noqa: E402
-from grafo import GrafoPendiente, reconstruir  # noqa: E402
+from grafo import GrafoPendiente, proyectar_todo  # noqa: E402
 
 DATOS = RAIZ / "datasets"
 EXTRA = DATOS / "extra"
@@ -93,9 +94,9 @@ def main() -> int:
         return 1
 
     try:
-        reconstruir()
+        proyectar_todo()
     except GrafoPendiente:
-        print("Grafo pendiente: se rehace cuando Neo4j esté implementado.")
+        print("Grafo pendiente: no se pudo proyectar. Se rehace con reconstruir().")
     except Exception:
         print("Grafo pendiente: la proyección falló y se rehace con reconstruir().")
     print("Carga lista.")
@@ -195,6 +196,20 @@ def _escribir(tablas: dict) -> None:
             f"{coleccion}: {len(tablas[nombre]['catedra'])} de la cátedra, "
             f"{len(tablas[nombre]['propios'])} propios"
         )
+
+    sucursal_de = {
+        documento["_id"]: documento["id_sucursal"]
+        for documento in db.farmaceuticos.find({}, {"id_sucursal": 1})
+    }
+    for venta in list(
+        db.ventas.find({}, {"id_farmaceutico": 1, "id_sucursal": 1})
+    ):
+        if not venta.get("id_sucursal"):
+            id_sucursal = sucursal_de.get(venta["id_farmaceutico"])
+            if id_sucursal:
+                db.ventas.update_one(
+                    {"_id": venta["_id"]}, {"$set": {"id_sucursal": id_sucursal}}
+                )
 
     detalles: dict[str, list[dict]] = {}
     for origen in ("catedra", "propios"):

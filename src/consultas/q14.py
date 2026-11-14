@@ -28,7 +28,7 @@ Valor de retorno:
 from pymongo.errors import DuplicateKeyError
 
 from db import base, hoy
-from grafo import proyectar, upsert_receta, upsert_venta
+from grafo import proyectar, upsert_venta_y_receta
 from reglas import MEDIOS, Rechazo, aplicar_receta, restaurar_receta, validar_venta
 
 from .q15 import descontar, reponer
@@ -81,6 +81,7 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
         "id_cliente": id_cliente,
         "id_farmaceutico": id_farmaceutico,
         "id_receta": id_receta,
+        "id_sucursal": contexto["sucursal"]["_id"],
         "fecha": hoy(),
         "tipo": "Con receta" if contexto["pide_receta"] else "Venta libre",
         "medio_pago": medio_pago,
@@ -97,13 +98,13 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
         reponer(_lotes(armados))
         return {"ok": False, "error": "no se pudo asignar un id de venta"}
 
-    avisos = [proyectar(upsert_venta, documento)]
+    receta = None
     if contexto["receta"] is not None:
         receta = base().recetas.find_one({"_id": contexto["receta"]["_id"]})
-        avisos.append(proyectar(upsert_receta, receta))
+    aviso = proyectar(upsert_venta_y_receta, documento, receta)
     respuesta = {"ok": True, "documento": documento}
-    if any(avisos):
-        respuesta["aviso_grafo"] = "el grafo quedó pendiente"
+    if aviso:
+        respuesta["aviso_grafo"] = aviso
     return respuesta
 
 
