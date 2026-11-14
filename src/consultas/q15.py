@@ -23,7 +23,7 @@ una venta nueva. El orden de vencimiento es {vencimiento: 1, _id: 1}.
 
 from db import base, hoy
 from grafo import proyectar, upsert_venta_y_receta
-from reglas import Rechazo, aplicar_receta, restaurar_receta, validar_venta
+from reglas import Rechazo, aplicar_receta, restaurar_receta, validar_texto, validar_venta
 
 
 ID = "q15"
@@ -98,6 +98,10 @@ def descontar(id_sucursal: str, items: list[dict]) -> list[dict]:
 
 
 def ejecutar(id_venta: str) -> dict:
+    try:
+        validar_texto(id_venta, "id_venta")
+    except Rechazo as rechazo:
+        return {"ok": False, "error": rechazo.mensaje}
     db = base()
     venta = db.ventas.find_one({"_id": id_venta})
     if venta is None:

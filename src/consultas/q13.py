@@ -27,7 +27,7 @@ from pymongo.errors import DuplicateKeyError
 
 from db import base
 from grafo import proyectar, upsert_cliente
-from reglas import Rechazo, validar_cobertura
+from reglas import Rechazo, validar_cobertura, validar_texto
 
 
 ID = "q13"
@@ -62,14 +62,15 @@ def alta(**datos) -> dict:
         return {"ok": False, "error": f"faltan datos: {', '.join(faltan)}"}
     nro = _vacio(datos.get("nro_afiliado"))
     try:
+        for campo in ALTA:
+            validar_texto(datos[campo], campo)
         validar_cobertura(datos["obra_social"], nro)
     except Rechazo as rechazo:
         return {"ok": False, "error": rechazo.mensaje}
-    if base().clientes.find_one({"dni": str(datos["dni"])}):
+    if base().clientes.find_one({"dni": datos["dni"]}):
         return {"ok": False, "error": "ya existe un cliente con ese DNI"}
 
     documento = {campo: datos[campo] for campo in ALTA}
-    documento["dni"] = str(datos["dni"])
     documento["nro_afiliado"] = nro
     documento["activo"] = True
     try:
@@ -87,6 +88,13 @@ def modificar(id_cliente: str, **datos) -> dict:
         return {"ok": False, "error": "modificar solo admite contacto y cobertura"}
     if not datos:
         return {"ok": False, "error": "no hay datos para modificar"}
+    try:
+        validar_texto(id_cliente, "id_cliente")
+        for campo, valor in datos.items():
+            if campo != "nro_afiliado":
+                validar_texto(valor, campo)
+    except Rechazo as rechazo:
+        return {"ok": False, "error": rechazo.mensaje}
     clientes = base().clientes
     actual = clientes.find_one({"_id": id_cliente})
     if actual is None:
@@ -110,6 +118,10 @@ def modificar(id_cliente: str, **datos) -> dict:
 
 
 def baja(id_cliente: str) -> dict:
+    try:
+        validar_texto(id_cliente, "id_cliente")
+    except Rechazo as rechazo:
+        return {"ok": False, "error": rechazo.mensaje}
     clientes = base().clientes
     resultado = clientes.update_one({"_id": id_cliente}, {"$set": {"activo": False}})
     if resultado.matched_count != 1:

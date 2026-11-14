@@ -15,7 +15,15 @@ class Rechazo(Exception):
         self.mensaje = mensaje
 
 
+def validar_texto(valor, campo: str) -> None:
+    if not isinstance(valor, str) or not valor.strip():
+        raise Rechazo(f"{campo} tiene que ser un texto no vacío")
+
+
 def validar_cobertura(obra_social: str, nro_afiliado: str | None) -> None:
+    validar_texto(obra_social, "obra_social")
+    if nro_afiliado not in (None, ""):
+        validar_texto(nro_afiliado, "nro_afiliado")
     if obra_social not in OBRAS:
         raise Rechazo("la obra social no es una de las previstas")
     vacio = nro_afiliado is None or nro_afiliado == ""
@@ -27,8 +35,20 @@ def validar_cobertura(obra_social: str, nro_afiliado: str | None) -> None:
 
 def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_receta: str | None):
     """Revisa cliente, farmacéutico, sucursal, productos y receta. No escribe."""
+    validar_texto(id_cliente, "id_cliente")
+    validar_texto(id_farmaceutico, "id_farmaceutico")
+    if id_receta is not None:
+        validar_texto(id_receta, "id_receta")
+    if not isinstance(items, list):
+        raise Rechazo("items tiene que ser una lista")
     if not items:
         raise Rechazo("la venta no tiene ítems")
+    for item in items:
+        if not isinstance(item, dict) or "id_producto" not in item or "cantidad" not in item:
+            raise Rechazo("cada ítem necesita id_producto y cantidad")
+        validar_texto(item["id_producto"], "id_producto")
+        if type(item["cantidad"]) is not int or item["cantidad"] <= 0:
+            raise Rechazo("la cantidad tiene que ser un entero mayor a cero")
 
     db = base()
     cliente = db.clientes.find_one({"_id": id_cliente})
@@ -49,8 +69,6 @@ def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_r
 
     productos = {}
     for item in items:
-        if item["cantidad"] <= 0:
-            raise Rechazo("la cantidad tiene que ser mayor a cero")
         producto = db.productos.find_one({"_id": item["id_producto"]})
         if producto is None:
             raise Rechazo(f"el producto {item['id_producto']} no existe")

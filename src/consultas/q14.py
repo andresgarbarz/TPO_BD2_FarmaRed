@@ -40,7 +40,7 @@ DESCRIPCION = "Registro de una venta Completada, con validaciones y actualizaciÃ
 
 
 def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pago: str, id_receta: str | None = None) -> dict:
-    if medio_pago not in MEDIOS:
+    if not isinstance(medio_pago, str) or medio_pago not in MEDIOS:
         return {"ok": False, "error": "el medio de pago no es uno de los previstos"}
 
     try:
