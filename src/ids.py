@@ -1,7 +1,6 @@
 """Correlativos globales C/V/D: la reserva se hace con un incremento atómico."""
 
 from pymongo import ReturnDocument
-from pymongo.errors import DuplicateKeyError
 
 
 def _maximo(valores, prefijo: str) -> int:
@@ -28,29 +27,6 @@ def iniciar(db, secuencias: list[dict]) -> None:
     """La carga de reinicio reemplaza también las secuencias desde sus CSV."""
     db.contadores.drop()
     db.contadores.insert_many(secuencias)
-
-
-def preparar(db, *prefijos: str) -> None:
-    """Migra una base sin contadores antes de abrir la transacción de venta."""
-    for prefijo in prefijos:
-        if db.contadores.find_one({"_id": prefijo}) is not None:
-            continue
-        if prefijo == "C":
-            valores = (d["_id"] for d in db.clientes.find({}, {"_id": 1}))
-        elif prefijo == "V":
-            valores = (d["_id"] for d in db.ventas.find({}, {"_id": 1}))
-        elif prefijo == "D":
-            valores = (i["id_detalle"] for d in db.ventas.find({}, {"items.id_detalle": 1})
-                       for i in d.get("items", []))
-        else:
-            raise ValueError("prefijo de id desconocido")
-        try:
-            db.contadores.update_one({"_id": prefijo},
-                                     {"$setOnInsert": {"ultimo": _maximo(valores, prefijo)}},
-                                     upsert=True)
-        except DuplicateKeyError:
-            # Otra llamada terminó la misma inicialización antes de este upsert.
-            pass
 
 
 def reservar(db, prefijo: str, cantidad: int = 1, *, session=None) -> int:

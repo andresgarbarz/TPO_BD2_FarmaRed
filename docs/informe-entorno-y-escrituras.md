@@ -65,9 +65,9 @@ La implementación posterior a la auditoría confirma lotes, receta, contadores 
 
 Q15 lee y completa la venta dentro de la transacción, de modo que dos llamadas simultáneas no consumen dos dispensas. Conserva su sucursal histórica y rechaza la operación si el farmacéutico fue reasignado. Los documentos antiguos sin sucursal usan la actual. Q14 rechaza una receta en ventas exclusivamente libres y valida cantidades enteras positivas antes de escribir. Estas decisiones del proyecto mantienen las reglas de venta, stock e integración. [P18, pp. 4–7]
 
-Los correlativos C/V/D usan contadores atómicos, inicializados por la carga o migrados una vez en bases anteriores. Q13 modifica la cobertura sólo si sigue siendo la que validó. DNI y matrícula se protegen con índices únicos.
+Los correlativos C/V/D usan contadores atómicos, inicializados por la carga. No se migran bases anteriores automáticamente. Q13 modifica la cobertura sólo si sigue siendo la que validó. DNI y matrícula se protegen con índices únicos.
 
-Las escrituras de clientes, recetas y ventas incrementan `_version` y marcan `grafo_pendiente` en la misma operación. Neo4j descarta proyecciones anteriores a su versión actual; la confirmación limpia sólo la versión correspondiente. Q02/Q03/Q10 recuperan pendientes antes de consultar y fallan explícitamente si no pueden actualizar el grafo. Una reconstrucción completa tiene un marcador persistente; una carga incompleta exige repetir el cargador. Ver [informe-grafo.md](informe-grafo.md).
+Las escrituras de clientes, recetas y ventas incrementan `_version` y marcan `grafo_pendiente` en la misma operación. Neo4j descarta proyecciones anteriores a su versión actual; la confirmación limpia sólo la versión correspondiente. Q02/Q03/Q10 fallan explícitamente si el grafo está pendiente; se debe ejecutar `reconstruir()` para actualizarlo. Una reconstrucción completa tiene un marcador persistente; una carga incompleta exige repetir el cargador. Ver [informe-grafo.md](informe-grafo.md).
 
 La carga valida y convierte todos los CSV y prepara los documentos completos antes del primer borrado. Sigue siendo una operación de reinicio que debe correr sin escrituras concurrentes. Los ejemplos anteriores conservan sus fechas y resultados históricos.
 

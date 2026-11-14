@@ -28,7 +28,7 @@ from pymongo.errors import DuplicateKeyError
 
 from db import base
 from grafo import proyectar, upsert_cliente
-from ids import preparar, reservar
+from ids import reservar
 from reglas import Rechazo, validar_cobertura, validar_texto
 
 
@@ -151,7 +151,6 @@ def _vacio(valor):
 
 def _insertar(documento: dict) -> None:
     db = base()
-    preparar(db, "C")
     nuevo = f"C{reservar(db, 'C'):03d}"
     documento["_id"] = documento["id_cliente"] = nuevo
     try:

@@ -11,7 +11,7 @@ Trabajo práctico obligatorio, 2.º cuatrimestre 2026. Red de farmacias con drog
 
 ## Motores
 
-MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidades. `src/grafo.py` implementa la proyección: `proyectar_todo()` reconstruye el grafo completo desde Mongo, `upsert_cliente` y `upsert_venta_y_receta` proyectan las escrituras individuales, y `consultar()` ejecuta Cypher para q02, q03 y q10. La carga llama a `proyectar_todo()` al final; la 13, a `upsert_cliente`; la 14 y la 15, a `upsert_venta_y_receta`, que escribe la venta y su receta en una sola transacción. Las proyecciones reemplazan las relaciones viejas para no conservar vínculos obsoletos. Si la proyección falla, la escritura en Mongo queda hecha y la consulta avisa que el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. La carga completa vacía el grafo antes de reproyectar, así que dos corridas dejan el mismo resultado. Clientes, recetas y ventas conservan `_version` y `grafo_pendiente` en Mongo: se confirma el pendiente junto a la escritura y se limpia sólo para la versión proyectada. Una proyección antigua no pisa una versión nueva. Antes de Q02/Q03/Q10 se recuperan pendientes; si no se logra, se lanza `GrafoPendiente` en lugar de servir el grafo atrasado.
+MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidades. `src/grafo.py` implementa la proyección: `proyectar_todo()` reconstruye el grafo completo desde Mongo, `upsert_cliente` y `upsert_venta_y_receta` proyectan las escrituras individuales, y `consultar()` ejecuta Cypher para q02, q03 y q10. La carga llama a `proyectar_todo()` al final; la 13, a `upsert_cliente`; la 14 y la 15, a `upsert_venta_y_receta`, que escribe la venta y su receta en una sola transacción. Las proyecciones reemplazan las relaciones viejas para no conservar vínculos obsoletos. Si la proyección falla, la escritura en Mongo queda hecha y la consulta avisa que el grafo quedó pendiente. `reconstruir()` lo rehace desde Mongo. La carga completa vacía el grafo antes de reproyectar, así que dos corridas dejan el mismo resultado. Clientes, recetas y ventas conservan `_version` y `grafo_pendiente` en Mongo: se confirma el pendiente junto a la escritura y se limpia sólo para la versión proyectada. Una proyección antigua no pisa una versión nueva. Q02/Q03/Q10 lanzan `GrafoPendiente` si hay cambios sin proyectar. Para volver a consultarlas se ejecuta `reconstruir()` explícitamente.
 
 ## Entorno
 
@@ -36,23 +36,23 @@ Neo4j es `5.26.32`, el último parche de la serie 5.26 publicado en Docker Hub, 
 
 ## Carga
 
-`python3 scripts/cargar.py` borra las ocho colecciones y las vuelve a llenar desde los CSV. Valida y convierte todos los CSV, verifica referencias, dominios y tamaño BSON antes del primer borrado. Se debe ejecutar sin escrituras concurrentes. Se puede correr dos veces: la segunda deja el mismo contenido que la primera. Una carga interrumpida queda marcada como incompleta y bloquea las lecturas del grafo hasta repetirla; si sólo falla Neo4j, el cargador termina con código 1 y la siguiente lectura puede recuperar la reconstrucción.
+`python3 scripts/cargar.py` borra las ocho colecciones y las vuelve a llenar desde los CSV. Convierte los CSV y verifica tipos, referencias, reglas de negocio y tamaño BSON antes del primer borrado. Los campos de texto vacíos se guardan como nulos; no se exigen datos de contacto para importar una fila. Se debe ejecutar sin escrituras concurrentes. Se puede correr dos veces: la segunda deja el mismo contenido que la primera. Una carga interrumpida queda marcada como incompleta y bloquea las lecturas del grafo hasta repetirla; si sólo falla Neo4j, el cargador termina con código 1 y se debe ejecutar `reconstruir()` cuando Neo4j esté disponible.
 
 Recargar borra lo creado con las consultas 13 y 14. Una venta que la consulta 15 pasó de Pendiente a Completada vuelve a Pendiente, con la fecha y los ítems del archivo.
+
+Si quedó una proyección pendiente, con Neo4j disponible y las escrituras detenidas:
+
+```bash
+PYTHONPATH=src python3 -c "from grafo import reconstruir; reconstruir()"
+```
 
 Los ejemplos de las consultas 1 a 12 se sacan con una carga recién hecha, porque la 13, la 14 y la 15 cambian lo que esas consultas leen.
 
 La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de Q11. No guarda un mes fijo: acumula por farmacéutico y fecha; Q11 filtra el mes actual y suma esos acumulados. El filtro de fecha se aplica antes de agrupar, usando el índice de ventas. La carga también crea índices para ventas por farmacéutico/fecha, cliente/fecha, estado/fecha y para el orden FEFO de lotes.
 
-Si la base ya estaba cargada, se pueden crear los índices y actualizar la vista sin recargar ni borrar ventas. Con las escrituras detenidas, desde la raíz del proyecto:
-
-```bash
-PYTHONPATH=src:scripts python3 -c "from cargar import crear_indices; from consultas.q11 import crear_vista; from grafo import reconstruir; crear_indices(); crear_vista(); reconstruir()"
-```
-
 ### Colecciones
 
-`_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay índices únicos sobre `clientes.dni` y `farmaceuticos.matricula`. Los IDs C/V/D se reservan con contadores atómicos; la carga los reinicia desde los CSV y una base anterior sin contadores se migra al primer uso. `base()` reutiliza el pool MongoDB del proceso; `cliente()` permite crear conexiones propias y `cerrar()` libera el pool compartido.
+`_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay índices únicos sobre `clientes.dni` y `farmaceuticos.matricula`. Los IDs C/V/D se reservan con contadores atómicos; la carga los inicializa desde los CSV. Al instalar esta versión se debe ejecutar el cargador; no hay migración automática de bases anteriores. `base()` reutiliza el pool MongoDB del proceso; `cliente()` permite crear conexiones propias y `cerrar()` libera el pool compartido.
 
 | Colección | Origen |
 |---|---|
@@ -136,7 +136,7 @@ python3 -c "from consultas.q06 import ejecutar; print(ejecutar())"
 python3 -c "from consultas.q12 import ejecutar; print(ejecutar())"
 ```
 
-Las regresiones verifican entradas, resultados y efectos de Q01–Q15: estados y fechas, FEFO, rechazo sin cambios, IDs únicos, cobertura y escrituras concurrentes. También comprueban que Q02 y Q10 reflejen las escrituras después de recuperar o actualizar el grafo.
+Las regresiones verifican entradas, resultados y efectos de Q01–Q15: estados y fechas, FEFO, rechazo sin cambios, IDs únicos, cobertura y escrituras concurrentes. También comprueban que Q02 y Q10 reflejen las escrituras después de reconstruir o actualizar el grafo.
 
 Sus decisiones y ejemplos están en [docs/informe-consultas-restantes.md](docs/informe-consultas-restantes.md). El modelo y las lecturas del grafo están en [docs/informe-grafo.md](docs/informe-grafo.md).
 

@@ -84,9 +84,9 @@ flowchart LR
 MongoDB es la fuente de verdad. Neo4j se reconstruye desde Mongo y nunca recibe
 escrituras que no hayan pasado primero por Mongo.
 
-Actualización posterior a la auditoría: cada escritura de cliente, receta o venta incrementa `_version` y marca `grafo_pendiente` en MongoDB. El upsert bloquea el nodo antes de comparar versiones y descarta snapshots antiguos, incluyendo sus relaciones. La confirmación limpia el pendiente sólo si coincide la versión. Antes de cada lectura, `recuperar_pendientes()` reintenta las proyecciones y rechaza la consulta si quedan cambios sin aplicar. No requiere conservar la petición original.
+Actualización posterior a la auditoría: cada escritura de cliente, receta o venta incrementa `_version` y marca `grafo_pendiente` en MongoDB. El upsert bloquea el nodo antes de comparar versiones y descarta snapshots antiguos, incluyendo sus relaciones. La confirmación limpia el pendiente sólo si coincide la versión. Las lecturas se rechazan mientras haya cambios sin aplicar; la recuperación se realiza ejecutando `reconstruir()` explícitamente.
 
-Las reconstrucciones completas usan `_estado_grafo` con una generación para recuperar un fallo y borrar nodos de cargas anteriores. Una carga interrumpida antes de terminar Mongo queda `carga_lista=False`: se debe repetir el cargador, y las lecturas no publican ese estado parcial. `scripts/cargar.py` devuelve código 1 si no pudo proyectar. La carga/reconstrucción se ejecuta como mantenimiento sin recargas concurrentes.
+La carga usa un marcador `_estado_grafo` para impedir lecturas mientras está incompleta o falta reconstruir el grafo. Una carga interrumpida antes de terminar Mongo queda `carga_lista=False`: se debe repetir el cargador, y las lecturas no publican ese estado parcial. `scripts/cargar.py` devuelve código 1 si no pudo proyectar. La carga/reconstrucción se ejecuta como mantenimiento sin recargas concurrentes.
 
 - **Carga completa.** `scripts/cargar.py` carga Mongo y después llama a
   `proyectar_todo()`. Esa función lee las colecciones, crea los constraints,
@@ -105,7 +105,7 @@ Las reconstrucciones completas usan `_estado_grafo` con una generación para rec
 - **Fallo de Neo4j.** Si la proyección falla, la escritura en Mongo ya está
   confirmada. `proyectar()` captura el error y la consulta devuelve
   `aviso_grafo: "el grafo quedó pendiente"` sin propagar la excepción.
-  La siguiente lectura intenta recuperarla; `reconstruir()` permite rehacer todo el grafo desde Mongo.
+  Las lecturas quedan bloqueadas hasta ejecutar `reconstruir()`, que rehace todo el grafo desde Mongo.
 - **Ítems repetidos.** `upsert_venta` conserva una relación `INCLUYE` por línea
   de detalle, identificada con `id_detalle`. Si una venta repite un producto con
   precios distintos, cada línea mantiene su propio `precio_unit`.

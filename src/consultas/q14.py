@@ -29,7 +29,7 @@ from pymongo.errors import PyMongoError
 
 from db import base, hoy
 from grafo import proyectar, upsert_venta_y_receta
-from ids import preparar, reservar
+from ids import reservar
 from reglas import MEDIOS, Rechazo, aplicar_receta, validar_entrada_venta, validar_venta
 
 from .q15 import descontar
@@ -87,7 +87,6 @@ def ejecutar(id_cliente: str, id_farmaceutico: str, items: list[dict], medio_pag
         return documento, receta
 
     try:
-        preparar(db, "V", "D")
         with db.client.start_session() as session:
             documento, receta = session.with_transaction(registrar)
     except Rechazo as rechazo:

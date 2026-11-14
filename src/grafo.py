@@ -8,17 +8,15 @@ viejas para no duplicar ni conservar vínculos obsoletos.
 
 Cada cambio confirmado en Mongo queda marcado hasta que Neo4j lo confirma.
 Si una proyección falla, proyectar devuelve el aviso y conserva el pendiente.
-consultar recupera los pendientes antes de leer; si no puede, rechaza la lectura.
-La carga conserva también el estado de su reconstrucción completa.
+consultar rechaza la lectura si hay pendientes; reconstruir los resuelve
+explícitamente desde Mongo, sin recuperación automática.
 """
 
 from contextlib import contextmanager
 from datetime import date, datetime
 
-from bson import ObjectId
 from neo4j import GraphDatabase
 from neo4j.exceptions import DriverError, Neo4jError
-from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 
 from db import NEO4J_URI, base
@@ -385,12 +383,8 @@ COLECCIONES_PENDIENTES = ("clientes", "recetas", "ventas")
 
 def _limpiar_pendiente(nombre: str, documento: dict) -> None:
     # Una proyección vieja no confirma la actualización que llegó después.
-    version = documento.get("_version", 0)
-    filtro = {"_id": documento["_id"], "grafo_pendiente": True}
-    if version == 0:
-        filtro["$or"] = [{"_version": 0}, {"_version": {"$exists": False}}]
-    else:
-        filtro["_version"] = version
+    filtro = {"_id": documento["_id"], "grafo_pendiente": True,
+              "_version": documento["_version"]}
     base()[nombre].update_one(filtro, {"$set": {"grafo_pendiente": False}})
 
 
@@ -398,36 +392,6 @@ def _proyectar_datos(tx, datos: dict[str, list[dict]]) -> None:
     for nombre, funcion in _PROYECCIONES.items():
         for documento in datos.get(nombre, []):
             funcion(tx, documento)
-
-
-def recuperar_pendientes() -> None:
-    """Reintenta lo confirmado en Mongo y aún no confirmado en el grafo.
-
-    Si entran cambios nuevos durante el intento, la lectura se rechaza para no
-    devolver datos que sabemos atrasados. El siguiente intento toma sus versiones.
-    """
-    try:
-        db = base()
-        if db["_estado_grafo"].find_one({"_id": "reconstruccion"}):
-            proyectar_todo()
-        datos = {nombre: list(db[nombre].find({"grafo_pendiente": True}))
-                 for nombre in COLECCIONES_PENDIENTES}
-        if not any(datos.values()):
-            if db["_estado_grafo"].find_one({"_id": "reconstruccion"}):
-                raise GrafoPendiente("hay una reconstrucción nueva pendiente")
-            return
-        with _sesion() as sesion:
-            _crear_constraints(sesion)
-            sesion.execute_write(_proyectar_datos, datos)
-        for nombre, documentos in datos.items():
-            for documento in documentos:
-                _limpiar_pendiente(nombre, documento)
-        if db["_estado_grafo"].find_one({"_id": "reconstruccion"}) or any(
-               db[nombre].find_one({"grafo_pendiente": True}, {"_id": 1})
-               for nombre in COLECCIONES_PENDIENTES):
-            raise GrafoPendiente("hay cambios nuevos pendientes de proyectar")
-    except (ReferenciaGrafo, Neo4jError, DriverError, OSError, PyMongoError) as error:
-        raise GrafoPendiente("no se pudo recuperar el grafo pendiente") from error
 
 
 def upsert_cliente(documento: dict) -> None:
@@ -478,13 +442,10 @@ def proyectar_todo() -> None:
     ejecutarse sin escrituras concurrentes en Mongo.
     """
     db = base()
-    reconstruccion = db["_estado_grafo"].find_one_and_update(
-        {"_id": "reconstruccion"},
-        {"$setOnInsert": {"generacion": ObjectId(), "carga_lista": True}},
-        upsert=True, return_document=ReturnDocument.AFTER,
-    )
-    if not reconstruccion.get("carga_lista"):
+    if db["_estado_grafo"].find_one({"_id": "reconstruccion", "carga_lista": False}):
         raise GrafoPendiente("carga incompleta: repetir scripts/cargar.py")
+    db["_estado_grafo"].update_one(
+        {"_id": "reconstruccion"}, {"$set": {"carga_lista": True}}, upsert=True)
     farmaceuticos = list(db.farmaceuticos.find())
     sucursal_de = {f["_id"]: f["id_sucursal"] for f in farmaceuticos}
     ventas = list(db.ventas.find())
@@ -503,14 +464,10 @@ def proyectar_todo() -> None:
         with _sesion() as sesion:
             _crear_constraints(sesion)
             sesion.execute_write(_reconstruir, datos)
-        # El reemplazo pudo borrar una proyección confirmada después de la foto.
-        for nombre in COLECCIONES_PENDIENTES:
-            db[nombre].update_many({}, {"$set": {"grafo_pendiente": True}})
         for nombre in COLECCIONES_PENDIENTES:
             for documento in datos[nombre]:
                 _limpiar_pendiente(nombre, documento)
-        if reconstruccion is not None:
-            db["_estado_grafo"].delete_one(reconstruccion)
+        db["_estado_grafo"].delete_one({"_id": "reconstruccion"})
     except Exception as error:
         raise GrafoPendiente("no se pudo proyectar el grafo") from error
 
@@ -526,14 +483,18 @@ def consultar(cypher: str, **parametros) -> list[dict]:
     Si Neo4j no está disponible, levanta GrafoPendiente con un mensaje claro.
     """
     try:
-        recuperar_pendientes()
+        db = base()
+        if db["_estado_grafo"].find_one({"_id": "reconstruccion"}) or any(
+                db[nombre].find_one({"grafo_pendiente": True}, {"_id": 1})
+                for nombre in COLECCIONES_PENDIENTES):
+            raise GrafoPendiente("el grafo quedó pendiente: ejecutar reconstruir()")
         with _sesion() as sesion:
             return sesion.execute_read(
                 lambda tx: [
                     registro.data() for registro in tx.run(cypher, **parametros)
                 ]
             )
-    except (Neo4jError, DriverError, OSError) as error:
+    except (Neo4jError, DriverError, OSError, PyMongoError) as error:
         raise GrafoPendiente("no se pudo consultar el grafo") from error
 
 

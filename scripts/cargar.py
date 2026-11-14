@@ -17,7 +17,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "src"))
 
-from bson import BSON, ObjectId  # noqa: E402
+from bson import BSON  # noqa: E402
 from pymongo.errors import ServerSelectionTimeoutError  # noqa: E402
 
 from db import COLECCIONES, base, fecha_de_partes  # noqa: E402
@@ -148,33 +148,25 @@ DOMINIOS = {
 
 def _validar(tablas: dict) -> dict:
     """Convierte y valida todas las filas sin escribir ni modificar la entrada."""
-    if not isinstance(tablas, dict) or set(tablas) != set(ARCHIVOS):
-        raise CargaInvalida("la carga debe incluir los nueve archivos esperados")
     convertidas = {}
     ids = {}
     for nombre, partes in tablas.items():
-        if not isinstance(partes, dict) or set(partes) != {"catedra", "propios"}:
-            raise CargaInvalida(f"{nombre}: faltan las partes catedra y propios")
         convertidas[nombre] = {}
         ids[nombre] = set()
         for origen in ("catedra", "propios"):
-            if not isinstance(partes[origen], list):
-                raise CargaInvalida(f"{nombre}: {origen} debe ser una lista de filas")
             convertidas[nombre][origen] = []
             for numero, fila in enumerate(partes[origen], 1):
                 contexto = f"{nombre} ({origen}, fila {numero})"
                 if (not isinstance(fila, dict) or set(fila) != set(COLUMNAS[nombre])
                         or any(not isinstance(valor, str) for valor in fila.values())):
                     raise CargaInvalida(f"{contexto}: columnas o valores inválidos")
-                if any(not valor.strip() for campo, valor in fila.items() if campo not in OPCIONALES):
-                    raise CargaInvalida(f"{contexto}: falta un campo obligatorio")
                 try:
                     documento = _convertir(fila)
                 except (ValueError, TypeError, OverflowError) as error:
                     raise CargaInvalida(f"{contexto}: {error}") from error
                 identificador = documento[ID_CAMPO[nombre]]
-                if identificador in ids[nombre]:
-                    raise CargaInvalida(f"{contexto}: el id {identificador} está repetido")
+                if not identificador or identificador in ids[nombre]:
+                    raise CargaInvalida(f"{contexto}: el id está vacío o repetido")
                 ids[nombre].add(identificador)
                 for campo, dominio in DOMINIOS.get(nombre, {}).items():
                     if documento[campo] not in dominio:
@@ -198,16 +190,16 @@ def _validar(tablas: dict) -> dict:
 
     dnis = set()
     for fila in filas["clientes.csv"]:
-        if fila["dni"] in dnis:
-            raise CargaInvalida(f"clientes: el DNI {fila['dni']} está repetido")
+        if not fila["dni"] or fila["dni"] in dnis:
+            raise CargaInvalida("clientes: DNI vacío o repetido")
         dnis.add(fila["dni"])
         if (fila["obra_social"] == "Sin cobertura") != (fila["nro_afiliado"] is None):
             raise CargaInvalida(f"clientes {fila['id_cliente']}: cobertura y afiliado incompatibles")
 
     matriculas = set()
     for fila in filas["farmaceuticos.csv"]:
-        if fila["matricula"] in matriculas:
-            raise CargaInvalida(f"farmaceuticos: la matrícula {fila['matricula']} está repetida")
+        if not fila["matricula"] or fila["matricula"] in matriculas:
+            raise CargaInvalida("farmaceuticos: matrícula vacía o repetida")
         matriculas.add(fila["matricula"])
 
     for fila in filas["recetas.csv"]:
@@ -220,7 +212,7 @@ def _validar(tablas: dict) -> dict:
             raise CargaInvalida(f"recetas {fila['id_receta']}: estado incompatible con las dispensas")
         proxima = fila["proxima_dispensa"]
         if proxima is not None and (fila["tipo"] != "Tratamiento prolongado"
-                or fila["estado"] == "Completada" or proxima < fila["fecha_emision"]):
+                or fila["estado"] == "Completada"):
             raise CargaInvalida(f"recetas {fila['id_receta']}: próxima dispensa incompatible")
 
     recetas = {r["id_receta"]: r for r in filas["recetas.csv"]}
@@ -272,8 +264,8 @@ def _escribir(tablas: dict) -> None:
         raise CargaInvalida(str(error)) from error
 
     db = base()
-    estado = {"_id": "reconstruccion", "generacion": ObjectId(), "carga_lista": False}
-    db["_estado_grafo"].replace_one({"_id": "reconstruccion"}, estado, upsert=True)
+    db["_estado_grafo"].replace_one(
+        {"_id": "reconstruccion"}, {"carga_lista": False}, upsert=True)
     for coleccion in COLECCIONES:
         db[coleccion].drop()
     for nombre, coleccion in ARCHIVOS.items():
@@ -289,12 +281,8 @@ def _escribir(tablas: dict) -> None:
     crear_indices()
     iniciar(db, secuencias)
     crear_vista()
-    resultado = db["_estado_grafo"].update_one(
-        {"_id": "reconstruccion", "generacion": estado["generacion"]},
-        {"$set": {"carga_lista": True}},
-    )
-    if resultado.matched_count != 1:
-        raise CargaInvalida("otra carga reemplazó la reconstrucción en curso")
+    db["_estado_grafo"].update_one(
+        {"_id": "reconstruccion"}, {"$set": {"carga_lista": True}})
 
 
 def crear_indices() -> None:
@@ -316,7 +304,7 @@ def crear_indices() -> None:
 def _convertir(fila: dict) -> dict:
     documento = {}
     for campo, valor in fila.items():
-        if campo in OPCIONALES and valor == "":
+        if valor == "" and campo not in ENTEROS | (FECHAS - {"proxima_dispensa"}) | {"activo"}:
             documento[campo] = None
         elif campo == "activo":
             if valor not in {"True", "False"}:
@@ -328,13 +316,10 @@ def _convertir(fila: dict) -> dict:
                 raise ValueError(f"{campo} excede el rango de enteros BSON")
             documento[campo] = entero
         elif campo in FECHAS:
-            if valor == "":
-                documento[campo] = None
-            else:
-                fecha = fecha_de_partes(valor)
-                if valor != f"{fecha.year:04d}-{fecha.month:02d}-{fecha.day:02d}":
-                    raise ValueError(f"{campo} debe usar AAAA-MM-DD")
-                documento[campo] = fecha
+            fecha = fecha_de_partes(valor)
+            if valor != f"{fecha.year:04d}-{fecha.month:02d}-{fecha.day:02d}":
+                raise ValueError(f"{campo} debe usar AAAA-MM-DD")
+            documento[campo] = fecha
         else:
             documento[campo] = valor
     return documento

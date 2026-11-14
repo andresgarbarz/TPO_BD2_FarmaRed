@@ -1,4 +1,4 @@
-"""Q02 refleja la venta completada por Q15 tras recuperar Neo4j."""
+"""Q02 rechaza el grafo atrasado y refleja Q15 después de reconstruirlo."""
 
 import io
 import os
@@ -45,13 +45,16 @@ class RecuperacionGrafo(unittest.TestCase):
             cargar._escribir(self.tablas)
         grafo.reconstruir()
 
-    def test_venta_confirmada_con_neo4j_caido_se_recupera_antes_de_leer(self):
+    def test_venta_confirmada_con_neo4j_caido_requiere_reconstruir(self):
         with patch.object(grafo, "_sesion", side_effect=ServiceUnavailable("caído")):
             respuesta = q15.ejecutar("V011")
             self.assertTrue(respuesta["ok"], respuesta)
             self.assertIn("aviso_grafo", respuesta)
             with self.assertRaises(grafo.GrafoPendiente):
                 q02.ejecutar()
+        with self.assertRaises(grafo.GrafoPendiente):
+            q02.ejecutar()
+        grafo.reconstruir()
         self.assertEqual([v["id_venta"] for v in q02.ejecutar()], ["V012"])
         self.assertEqual(self.db.stock_lotes.find_one({"_id": "L014"})["unidades"], 44)
         self.assertEqual(self.db.recetas.find_one({"_id": "RC006"})["estado"], "Completada")
