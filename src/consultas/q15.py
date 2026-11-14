@@ -7,7 +7,8 @@ Propósito: dada una venta registrada en estado Pendiente, decrementar las unida
 de cada producto en los lotes de la sucursal del farmacéutico. Se consumen primero
 los lotes con vencimiento más próximo. Los lotes vencidos no se dispensan. Si el
 stock vigente no alcanza, o la venta no está Pendiente, no se modifica ningún lote
-ni la receta, y la venta queda como estaba.
+ni la receta, y la venta queda como estaba. Los cambios se confirman en una
+única transacción MongoDB; el grafo se proyecta después del commit.
 
 Parámetros:
     id_venta: identificador de la venta ya registrada.
@@ -21,9 +22,11 @@ La función descontar(id_sucursal, items) también la usa q14 antes de insertar
 una venta nueva. El orden de vencimiento es {vencimiento: 1, _id: 1}.
 """
 
+from pymongo.errors import PyMongoError
+
 from db import base, hoy
 from grafo import proyectar, upsert_venta_y_receta
-from reglas import Rechazo, aplicar_receta, restaurar_receta, validar_texto, validar_venta
+from reglas import Rechazo, aplicar_receta, validar_texto, validar_venta
 
 
 ID = "q15"
@@ -31,18 +34,11 @@ TIPO = "servicio"
 DESCRIPCION = "Descuento de stock por FEFO para una venta Pendiente. Si no alcanza, no modifica ningún lote."
 
 
-def reponer(aplicados: list[tuple[str, int]]) -> None:
-    lotes = base().stock_lotes
-    for id_lote, unidades in reversed(aplicados):
-        lotes.update_one({"_id": id_lote}, {"$inc": {"unidades": unidades}})
-
-
-def descontar(id_sucursal: str, items: list[dict]) -> list[dict]:
-    """Arma el plan FEFO y descuenta. Si un lote ya no alcanza, repone y rechaza.
+def descontar(id_sucursal: str, items: list[dict], *, db, session) -> list[dict]:
+    """Arma el plan FEFO y descuenta dentro de la transacción del llamador.
 
     Cada ítem vuelve con lotes: [{id_lote, unidades}]. No graba la venta.
     """
-    db = base()
     fecha = hoy()
     planes: list[list[dict]] = []
     vistos: dict[str, int] = {}
@@ -57,6 +53,7 @@ def descontar(id_sucursal: str, items: list[dict]) -> list[dict]:
                 "vencimiento": {"$gte": fecha},
             },
             sort=[("vencimiento", 1), ("_id", 1)],
+            session=session,
         )
         for lote in cursor:
             if falta == 0:
@@ -74,20 +71,15 @@ def descontar(id_sucursal: str, items: list[dict]) -> list[dict]:
             )
         planes.append(asignacion)
 
-    aplicados: list[tuple[str, int]] = []
-    try:
-        for asignacion in planes:
-            for toma in asignacion:
-                resultado = db.stock_lotes.update_one(
-                    {"_id": toma["id_lote"], "unidades": {"$gte": toma["unidades"]}},
-                    {"$inc": {"unidades": -toma["unidades"]}},
-                )
-                if resultado.modified_count != 1:
-                    raise Rechazo("un lote ya no alcanza")
-                aplicados.append((toma["id_lote"], toma["unidades"]))
-    except Rechazo:
-        reponer(aplicados)
-        raise
+    for asignacion in planes:
+        for toma in asignacion:
+            resultado = db.stock_lotes.update_one(
+                {"_id": toma["id_lote"], "unidades": {"$gte": toma["unidades"]}},
+                {"$inc": {"unidades": -toma["unidades"]}},
+                session=session,
+            )
+            if resultado.modified_count != 1:
+                raise Rechazo("un lote ya no alcanza")
 
     enriquecidos = []
     for item, asignacion in zip(items, planes):
@@ -103,67 +95,43 @@ def ejecutar(id_venta: str) -> dict:
     except Rechazo as rechazo:
         return {"ok": False, "error": rechazo.mensaje}
     db = base()
-    venta = db.ventas.find_one({"_id": id_venta})
-    if venta is None:
-        return {"ok": False, "error": "la venta no existe"}
-    if venta["estado"] != "Pendiente":
-        return {
-            "ok": False,
-            "error": f"la venta está {venta['estado']}; solo se completa una Pendiente",
-        }
+    fecha = hoy()
+
+    def completar(session):
+        venta = db.ventas.find_one({"_id": id_venta}, session=session)
+        if venta is None:
+            raise Rechazo("la venta no existe")
+        if venta["estado"] != "Pendiente":
+            raise Rechazo(f"la venta está {venta['estado']}; solo se completa una Pendiente")
+        contexto = validar_venta(venta["id_cliente"], venta["id_farmaceutico"],
+                                 venta["items"], venta.get("id_receta"), db=db, session=session)
+        items = descontar(contexto["sucursal"]["_id"], venta["items"], db=db, session=session)
+        if contexto["receta"] is not None:
+            aplicar_receta(contexto["receta"], fecha, db=db, session=session)
+        resultado = db.ventas.update_one(
+            {"_id": id_venta, "estado": "Pendiente"},
+            {"$set": {"estado": "Completada", "fecha": fecha,
+                      "fecha_registro": venta["fecha"],
+                      "id_sucursal": contexto["sucursal"]["_id"], "items": items}},
+            session=session,
+        )
+        if resultado.matched_count != 1:
+            raise Rechazo("la venta ya no está Pendiente")
+        documento = db.ventas.find_one({"_id": id_venta}, session=session)
+        receta = (db.recetas.find_one({"_id": contexto["receta"]["_id"]}, session=session)
+                  if contexto["receta"] is not None else None)
+        return documento, receta
 
     try:
-        contexto = validar_venta(
-            venta["id_cliente"],
-            venta["id_farmaceutico"],
-            venta["items"],
-            venta.get("id_receta"),
-        )
-        items = descontar(contexto["sucursal"]["_id"], venta["items"])
+        with db.client.start_session() as session:
+            documento, receta = session.with_transaction(completar)
     except Rechazo as rechazo:
         return {"ok": False, "error": rechazo.mensaje}
+    except PyMongoError:
+        return {"ok": False, "error": "no se pudo confirmar la venta"}
 
-    anterior = None
-    if contexto["receta"] is not None:
-        try:
-            anterior = aplicar_receta(contexto["receta"], hoy())
-        except Rechazo as rechazo:
-            reponer(_lotes_de(items))
-            return {"ok": False, "error": rechazo.mensaje}
-
-    fecha_reserva = venta["fecha"]
-    resultado = db.ventas.update_one(
-        {"_id": id_venta, "estado": "Pendiente"},
-        {
-            "$set": {
-                "estado": "Completada",
-                "fecha": hoy(),
-                "fecha_registro": fecha_reserva,
-                "id_sucursal": contexto["sucursal"]["_id"],
-                "items": items,
-            }
-        },
-    )
-    if resultado.matched_count != 1:
-        if anterior is not None:
-            restaurar_receta(anterior)
-        reponer(_lotes_de(items))
-        return {"ok": False, "error": "la venta ya no está Pendiente"}
-
-    documento = db.ventas.find_one({"_id": id_venta})
-    receta = None
-    if contexto["receta"] is not None:
-        receta = db.recetas.find_one({"_id": contexto["receta"]["_id"]})
     aviso = proyectar(upsert_venta_y_receta, documento, receta)
     return _respuesta(documento, [aviso])
-
-
-def _lotes_de(items: list[dict]) -> list[tuple[str, int]]:
-    return [
-        (toma["id_lote"], toma["unidades"])
-        for item in items
-        for toma in item.get("lotes", [])
-    ]
 
 
 def _respuesta(documento: dict, avisos: list[str | None]) -> dict:
