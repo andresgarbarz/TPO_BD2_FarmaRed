@@ -83,7 +83,7 @@ python3 -m consultas
 
 Eso lista las quince consultas. Las que reciben parámetros son q03, q10, q13, q14 y q15. q14 y q15 descuentan stock antes de confirmar la venta: si no alcanza, no quedan ni la venta ni la receta modificadas.
 
-Están implementadas Q01, Q05, Q07, Q08, Q09, Q11 y Q13–Q15. Quedan pendientes Q02, Q03, Q04, Q06, Q10 y Q12, además del grafo.
+Están implementadas Q01–Q15 y la proyección del grafo. Q02, Q03 y Q10 usan Neo4j; las demás usan MongoDB. Quedan los registros adicionales y la consolidación del informe PDF.
 
 Las seis lecturas devuelven una lista de documentos, sin argumentos. Después de cargar los datos, desde `src/`:
 
@@ -106,11 +106,27 @@ Con MongoDB levantado y las dependencias instaladas, desde la raíz del proyecto
 python3 -m unittest discover -s tests -v
 ```
 
-Las 17 pruebas requieren MongoDB real; fallan si no está disponible. Cargan los nueve CSV provistos en una base temporal `farmared_test_<id>`, agregan casos borde y eliminan esa base al terminar. No borran ni recargan la base `farmared`. Usan la URI de `MONGO_URI` (por defecto `mongodb://127.0.0.1:27017`). Para otra instancia, por ejemplo:
+Las 22 pruebas de MongoDB requieren el motor real; fallan si no está disponible. Cargan los nueve CSV provistos en una base temporal `farmared_test_<id>`, agregan casos borde y eliminan esa base al terminar. No borran ni recargan la base `farmared` ni proyectan datos en Neo4j. Usan la URI de `MONGO_URI` (por defecto `mongodb://127.0.0.1:27017`). Para otra instancia, por ejemplo:
 
 ```bash
 MONGO_URI=mongodb://127.0.0.1:27018 python3 -m unittest discover -s tests -v
 ```
+
+Las tres pruebas de grafo se habilitan con `FARMARED_TEST_NEO4J_URI`. Esa URI debe apuntar a una instancia Neo4j **exclusiva y descartable**: las pruebas vacían y reconstruyen todo su grafo. Sin esa variable se omiten. MongoDB sigue usando bases temporales propias.
+
+```bash
+MONGO_URI=mongodb://127.0.0.1:27019 FARMARED_TEST_NEO4J_URI=bolt://127.0.0.1:7689 python3 -m unittest discover -s tests -v
+```
+
+Q04, Q06 y Q12 también se ejecutan sin argumentos, desde `src/`:
+
+```bash
+python3 -c "from consultas.q04 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q06 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q12 import ejecutar; print(ejecutar())"
+```
+
+Sus decisiones y ejemplos están en [docs/informe-consultas-restantes.md](docs/informe-consultas-restantes.md). El modelo y las lecturas del grafo están en [docs/informe-grafo.md](docs/informe-grafo.md).
 
 La 13, la 14 y la 15 se ejecutan así, con el directorio actual en `src/`:
 
@@ -162,5 +178,5 @@ scripts/           verificación y carga
 src/db.py          conexión y hoy()
 src/grafo.py       proyección a Neo4j y Cypher de q02, q03 y q10
 src/consultas/     q01.py … q15.py
-tests/             integración de las seis lecturas contra MongoDB real
+tests/             integración contra MongoDB y, por opción explícita, Neo4j descartable
 ```

@@ -2,6 +2,8 @@
 
 Implementación y verificación: 10 de noviembre de 2026, MongoDB `8.3.11`, PyMongo `4.15.3` y Python `3.11`. Las seis consultas usan MongoDB y exponen `ejecutar()` sin parámetros, con retorno `list[dict]`; sin coincidencias devuelven `[]`. La consigna está en [P18, p. 6].
 
+Actualización del 14 de noviembre de 2026: las quince consultas y el grafo están integrados. Los resultados del 10 de noviembre de este documento se conservan como historial. La revisión completa ejecutó 25 pruebas; ver [Q04/Q06/Q12 e integración](informe-consultas-restantes.md).
+
 ## Modelo y relaciones
 
 Se conserva el modelo del grupo: los ítems están embebidos en `ventas.items`; las entidades compartidas se referencian por id y se resuelven con `$lookup` contra `_id`. Embeber datos que se leen con su documento principal y referenciar datos compartidos aplica los criterios de modelado de la materia. [T14, pp. 2–8, 16–20]

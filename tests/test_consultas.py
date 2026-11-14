@@ -15,7 +15,7 @@ sys.path[:0] = [str(RAIZ / "src"), str(RAIZ / "scripts")]
 import cargar
 import db
 import reglas
-from consultas import q01, q05, q07, q08, q09, q11, q15
+from consultas import q01, q04, q05, q06, q07, q08, q09, q11, q12, q15
 
 HOY = datetime(2026, 11, 10)
 
@@ -36,10 +36,11 @@ class ConsultasMongo(unittest.TestCase):
         cargar._validar(cls.tablas)
 
     def setUp(self):
-        for modulo in (cargar, q01, q05, q07, q08, q09, q11, q15, reglas):
+        for modulo in (cargar, q01, q04, q05, q06, q07, q08, q09, q11, q12, q15, reglas):
             self.enterContext(patch.object(modulo, "base", return_value=self.db))
-        for modulo in (q05, q11, q15):
+        for modulo in (q05, q06, q11, q12, q15):
             self.enterContext(patch.object(modulo, "hoy", return_value=HOY))
+        self.enterContext(patch.object(q15, "proyectar", return_value=None))
         self.cargar()
 
     def cargar(self):
@@ -59,6 +60,53 @@ class ConsultasMongo(unittest.TestCase):
             "total": sum(i["cantidad"] * i["precio_unit"] for i in items),
             "estado": estado, "items": items,
         })
+
+    def test_q04_todas_las_recetas_y_clientes_inactivos(self):
+        self.assertEqual([(c["id_cliente"], c["cantidad_recetas"]) for c in q04.ejecutar()],
+                         [("C001", 2), ("C002", 2), ("C006", 2)])
+        self.db.clientes.update_one({"_id": "C001"}, {"$set": {"activo": False}})
+        self.db.recetas.update_many({"id_cliente": "C001"}, {"$set": {"estado": "Vencida"}})
+        self.assertEqual(q04.ejecutar()[0]["cantidad_recetas"], 2)
+
+    def test_q06_dataset_y_cliente_completo(self):
+        resultado = q06.ejecutar()
+        self.assertEqual([r["_id"] for r in resultado], ["RC002", "RC003", "RC004"])
+        for receta in resultado:
+            self.assertEqual(receta["cliente"], self.db.clientes.find_one(
+                {"_id": receta["id_cliente"]}))
+
+    def test_q06_limites_nulos_estados_y_cliente_inactivo(self):
+        self.db.recetas.delete_many({})
+        self.db.clientes.update_one({"_id": "C001"}, {"$set": {"activo": False}})
+        for i, fecha in enumerate((HOY - timedelta(days=1), HOY, HOY + timedelta(days=1), None)):
+            self.db.recetas.insert_one({"_id": f"RX{i}", "id_cliente": "C001",
+                "tipo": "Tratamiento prolongado", "estado": "Vigente", "proxima_dispensa": fecha})
+        self.db.recetas.insert_one({"_id": "RX4", "id_cliente": "C001",
+            "tipo": "Tratamiento prolongado", "estado": "Vigente"})
+        for i, cambios in enumerate(({"estado": "Vencida"}, {"tipo": "Simple"}), 5):
+            self.db.recetas.insert_one({"_id": f"RX{i}", "id_cliente": "C001",
+                "tipo": "Tratamiento prolongado", "estado": "Vigente",
+                "proxima_dispensa": HOY - timedelta(days=1), **cambios})
+        self.assertEqual([r["_id"] for r in q06.ejecutar()], ["RX0"])
+        self.assertFalse(q06.ejecutar()[0]["cliente"]["activo"])
+
+    def test_q12_dataset(self):
+        self.assertEqual([c["_id"] for c in q12.ejecutar()], ["C004", "C008"])
+
+    def test_q12_ventana_estados_y_clientes_sin_compras(self):
+        self.db.ventas.delete_many({})
+        for dias in (365, -1):
+            self.venta(f"VX{dias}", fecha=HOY - timedelta(days=dias))
+        self.assertIn("C001", [c["_id"] for c in q12.ejecutar()])
+        self.db.clientes.update_one({"_id": "C001"}, {"$set": {"activo": False}})
+        for estado in ("Completada", "Pendiente", "Anulada"):
+            with self.subTest(estado=estado):
+                self.venta("VXreciente", fecha=HOY - timedelta(days=364), estado=estado)
+                self.assertNotIn("C001", [c["_id"] for c in q12.ejecutar()])
+                self.db.ventas.delete_one({"_id": "VXreciente"})
+        self.venta("VXhoy", fecha=HOY + timedelta(hours=23, minutes=59))
+        self.assertNotIn("C001", [c["_id"] for c in q12.ejecutar()])
+        self.assertIn("C008", [c["_id"] for c in q12.ejecutar()])
 
     def test_q09_dataset(self):
         self.assertEqual([v["_id"] for v in q09.ejecutar()], ["V013", "V014"])
