@@ -15,8 +15,10 @@ La carga conserva también el estado de su reconstrucción completa.
 from contextlib import contextmanager
 from datetime import date, datetime
 
+from bson import ObjectId
 from neo4j import GraphDatabase
 from neo4j.exceptions import DriverError, Neo4jError
+from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 
 from db import NEO4J_URI, base
@@ -480,8 +482,12 @@ def proyectar_todo() -> None:
     ejecutarse sin escrituras concurrentes en Mongo.
     """
     db = base()
-    reconstruccion = db["_estado_grafo"].find_one({"_id": "reconstruccion"})
-    if reconstruccion is not None and not reconstruccion.get("carga_lista"):
+    reconstruccion = db["_estado_grafo"].find_one_and_update(
+        {"_id": "reconstruccion"},
+        {"$setOnInsert": {"generacion": ObjectId(), "carga_lista": True}},
+        upsert=True, return_document=ReturnDocument.AFTER,
+    )
+    if not reconstruccion.get("carga_lista"):
         raise GrafoPendiente("carga incompleta: repetir scripts/cargar.py")
     farmaceuticos = list(db.farmaceuticos.find())
     sucursal_de = {f["_id"]: f["id_sucursal"] for f in farmaceuticos}
@@ -501,6 +507,9 @@ def proyectar_todo() -> None:
         with _sesion() as sesion:
             _crear_constraints(sesion)
             sesion.execute_write(_reconstruir, datos)
+        # El reemplazo pudo borrar una proyección confirmada después de la foto.
+        for nombre in COLECCIONES_PENDIENTES:
+            db[nombre].update_many({}, {"$set": {"grafo_pendiente": True}})
         for nombre in COLECCIONES_PENDIENTES:
             for documento in datos[nombre]:
                 _limpiar_pendiente(nombre, documento)

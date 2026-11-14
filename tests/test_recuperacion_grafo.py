@@ -111,6 +111,67 @@ class RecuperacionGrafo(unittest.TestCase):
         cliente = next(c for c in q10.ejecutar("S002") if c["id_cliente"] == "C001")
         self.assertFalse(cliente["activo"])
 
+    def test_reconstruccion_no_pierde_escrituras_proyectadas_despues_de_la_foto(self):
+        reconstruir = grafo._reconstruir
+        for operacion in ("alta", "baja"):
+            with self.subTest(operacion=operacion):
+                cambios = []
+
+                def escribir_despues_de_la_foto(tx, datos):
+                    if not cambios:
+                        if operacion == "alta":
+                            respuesta = q13.ejecutar(
+                                "alta", nombre="Ana", apellido="Prueba", dni="99900022",
+                                email="ana@example.test", telefono="123", ciudad="CABA",
+                                provincia="Buenos Aires", obra_social="Sin cobertura")
+                        else:
+                            respuesta = q13.ejecutar("baja", id_cliente="C001")
+                        self.assertTrue(respuesta["ok"], respuesta)
+                        self.assertNotIn("aviso_grafo", respuesta)
+                        cambios.append(respuesta["documento"])
+                        self.assertFalse(self.db.clientes.find_one(
+                            {"_id": cambios[0]["_id"]})["grafo_pendiente"])
+                    reconstruir(tx, datos)
+
+                with patch.object(grafo, "_reconstruir", escribir_despues_de_la_foto):
+                    grafo.reconstruir()
+                documento = cambios[0]
+                self.assertTrue(self.db.clientes.find_one(
+                    {"_id": documento["_id"]})["grafo_pendiente"])
+                self.assertEqual(grafo.consultar(
+                    "MATCH (c:Cliente {id: $id}) RETURN c.activo AS activo, c._version AS version",
+                    id=documento["_id"]),
+                    [{"activo": documento["activo"], "version": documento["_version"]}])
+
+    def test_salida_despues_del_commit_de_reconstruccion_conserva_el_reintento(self):
+        reconstruir = grafo._reconstruir
+        actualizar = Collection.update_many
+        cambios = []
+
+        def escribir_despues_de_la_foto(tx, datos):
+            if not cambios:
+                cambios.append(q13.ejecutar("baja", id_cliente="C001"))
+                self.assertTrue(cambios[0]["ok"], cambios[0])
+                self.assertNotIn("aviso_grafo", cambios[0])
+            reconstruir(tx, datos)
+
+        def interrumpir(coleccion, filtro, cambio, *args, **kwargs):
+            if (coleccion.database.name == self.db.name and coleccion.name == "clientes"
+                    and cambio == {"$set": {"grafo_pendiente": True}}):
+                raise SystemExit("salida después del commit de Neo4j")
+            return actualizar(coleccion, filtro, cambio, *args, **kwargs)
+
+        with patch.object(grafo, "_reconstruir", escribir_despues_de_la_foto),                 patch.object(Collection, "update_many", interrumpir):
+            with self.assertRaises(SystemExit):
+                grafo.reconstruir()
+        estado = self.db["_estado_grafo"].find_one({"_id": "reconstruccion"})
+        self.assertIsNotNone(estado)
+        self.assertTrue(estado["carga_lista"])
+        self.assertFalse(self.db.clientes.find_one({"_id": "C001"})["grafo_pendiente"])
+        cliente = next(c for c in q10.ejecutar("S002") if c["id_cliente"] == "C001")
+        self.assertFalse(cliente["activo"])
+        self.assertIsNone(self.db["_estado_grafo"].find_one({"_id": "reconstruccion"}))
+
     def test_recarga_fallida_se_recupera_sin_conservar_nodos_de_la_carga_vieja(self):
         alta = q13.ejecutar("alta", nombre="Ana", apellido="Prueba", dni="99900011",
                             email="ana@example.test", telefono="123", ciudad="CABA",
