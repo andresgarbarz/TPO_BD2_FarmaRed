@@ -117,9 +117,13 @@ def modificar(id_cliente: str, **datos) -> dict:
     if "nro_afiliado" in cambios:
         cambios["nro_afiliado"] = nro
     documento = clientes.find_one_and_update(
-        {"_id": id_cliente}, {"$set": cambios, "$inc": {"_version": 1}},
+        {"_id": id_cliente, "obra_social": actual["obra_social"],
+         "nro_afiliado": actual.get("nro_afiliado")},
+        {"$set": cambios, "$inc": {"_version": 1}},
         return_document=ReturnDocument.AFTER,
     )
+    if documento is None:
+        return {"ok": False, "error": "la cobertura del cliente cambió; reintentá la modificación"}
     return _proyectar(documento)
 
 
