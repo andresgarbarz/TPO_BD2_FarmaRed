@@ -3,8 +3,10 @@
 Las URIs salen del entorno. Fuera de Codespaces el defecto es localhost.
 """
 
+import atexit
 import os
 from datetime import datetime
+from threading import Lock
 from zoneinfo import ZoneInfo
 
 from pymongo import MongoClient
@@ -26,6 +28,8 @@ COLECCIONES = (
 )
 
 ZONA = ZoneInfo("America/Argentina/Buenos_Aires")
+_cliente_compartido = None
+_conexion_lock = Lock()
 
 
 def cliente() -> MongoClient:
@@ -33,7 +37,25 @@ def cliente() -> MongoClient:
 
 
 def base() -> Database:
-    return cliente()[BASE]
+    """Reutiliza el pool del proceso; cliente() sigue creando clientes propios."""
+    global _cliente_compartido
+    with _conexion_lock:
+        if _cliente_compartido is None:
+            _cliente_compartido = cliente()
+        return _cliente_compartido[BASE]
+
+
+def cerrar() -> None:
+    """Libera el pool compartido y permite abrirlo otra vez si se necesita."""
+    global _cliente_compartido
+    with _conexion_lock:
+        actual = _cliente_compartido
+        _cliente_compartido = None
+        if actual is not None:
+            actual.close()
+
+
+atexit.register(cerrar)
 
 
 def hoy() -> datetime:
