@@ -40,7 +40,13 @@ Recargar borra lo creado con las consultas 13 y 14. Una venta que la consulta 15
 
 Los ejemplos de las consultas 1 a 12 se sacan con una carga recién hecha, porque la 13, la 14 y la 15 cambian lo que esas consultas leen.
 
-La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de Q11. No guarda un mes fijo: agrupa por farmacéutico, año y mes; Q11 consulta el período actual.
+La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de Q11. No guarda un mes fijo: acumula por farmacéutico y fecha; Q11 filtra el mes actual y suma esos acumulados. El filtro de fecha se aplica antes de agrupar, usando el índice de ventas. La carga también crea índices para ventas por farmacéutico/fecha, cliente/fecha, estado/fecha y para el orden FEFO de lotes.
+
+Si la base ya estaba cargada, se pueden crear los índices y actualizar la vista sin recargar ni borrar ventas. Desde la raíz del proyecto:
+
+```bash
+PYTHONPATH=src:scripts python3 -c "from cargar import crear_indices; from consultas.q11 import crear_vista; crear_indices(); crear_vista()"
+```
 
 ### Colecciones
 

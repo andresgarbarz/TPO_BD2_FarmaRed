@@ -274,9 +274,20 @@ def _escribir(tablas: dict) -> None:
     print("detalle_ventas: "
           f"{len(tablas['detalle_ventas.csv']['catedra'])} de la cátedra, "
           f"{len(tablas['detalle_ventas.csv']['propios'])} propios, embebidos en ventas")
+    crear_indices()
+    crear_vista()
+
+
+def crear_indices() -> None:
+    """Crea los índices de la carga sin borrar ni recargar documentos."""
+    db = base()
     db.clientes.create_index("dni", unique=True, name="dni_unico")
     db.farmaceuticos.create_index("matricula", unique=True, name="matricula_unica")
-    crear_vista()
+    db.ventas.create_index([("id_farmaceutico", 1), ("fecha", 1)], name="ventas_farmaceutico_fecha")
+    db.ventas.create_index([("id_cliente", 1), ("fecha", 1)], name="ventas_cliente_fecha")
+    db.ventas.create_index([("estado", 1), ("fecha", 1)], name="ventas_estado_fecha")
+    db.stock_lotes.create_index(
+        [("id_producto", 1), ("id_sucursal", 1), ("vencimiento", 1), ("_id", 1)], name="lotes_fefo")
 
 
 def _convertir(fila: dict) -> dict:
