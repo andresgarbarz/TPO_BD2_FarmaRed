@@ -1,4 +1,4 @@
-"""Lista las consultas pendientes. No las ejecuta."""
+"""Lista las quince consultas. No las ejecuta."""
 
 from . import CONSULTAS
 

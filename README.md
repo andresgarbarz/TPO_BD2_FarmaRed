@@ -40,6 +40,8 @@ Recargar borra lo creado con las consultas 13 y 14. Una venta que la consulta 15
 
 Los ejemplos de las consultas 1 a 12 se sacan con una carga recién hecha, porque la 13, la 14 y la 15 cambian lo que esas consultas leen.
 
+La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de Q11. No guarda un mes fijo: agrupa por farmacéutico, año y mes; Q11 consulta el período actual.
+
 ### Colecciones
 
 `_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay un índice único sobre `clientes.dni`.
@@ -79,6 +81,35 @@ python3 -m consultas
 ```
 
 Eso lista las quince consultas. Las que reciben parámetros son q03, q10, q13, q14 y q15. q14 y q15 descuentan stock antes de confirmar la venta: si no alcanza, no quedan ni la venta ni la receta modificadas.
+
+Están implementadas Q01, Q05, Q07, Q08, Q09, Q11 y Q13–Q15. Quedan pendientes Q02, Q03, Q04, Q06, Q10 y Q12, además del grafo.
+
+Las seis lecturas devuelven una lista de documentos, sin argumentos. Después de cargar los datos, desde `src/`:
+
+```bash
+python3 -c "from consultas.q01 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q05 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q07 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q08 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q09 import ejecutar; print(ejecutar())"
+python3 -c "from consultas.q11 import ejecutar; print(ejecutar())"
+```
+
+Q05 cuenta 60 días incluyendo hoy: desde `hoy() - 59 días` inclusive hasta mañana exclusivo, con la fecha de Argentina. Q11 usa el año y mes de `hoy()`. Con los CSV provistos, sin extras, noviembre de 2026 no tiene ingresos: Q11 devuelve `[]`. Los ejemplos, retornos y decisiones están en [docs/informe-consultas-lectura.md](docs/informe-consultas-lectura.md).
+
+### Pruebas de las consultas
+
+Con MongoDB levantado y las dependencias instaladas, desde la raíz del proyecto:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Las 17 pruebas requieren MongoDB real; fallan si no está disponible. Cargan los nueve CSV provistos en una base temporal `farmared_test_<id>`, agregan casos borde y eliminan esa base al terminar. No borran ni recargan la base `farmared`. Usan la URI de `MONGO_URI` (por defecto `mongodb://127.0.0.1:27017`). Para otra instancia, por ejemplo:
+
+```bash
+MONGO_URI=mongodb://127.0.0.1:27018 python3 -m unittest discover -s tests -v
+```
 
 La 13, la 14 y la 15 se ejecutan así, con el directorio actual en `src/`:
 
@@ -122,4 +153,5 @@ scripts/           verificación y carga
 src/db.py          conexión y hoy()
 src/grafo.py       proyección vacía
 src/consultas/     q01.py … q15.py
+tests/             integración de las seis lecturas contra MongoDB real
 ```

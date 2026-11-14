@@ -19,6 +19,7 @@ sys.path.insert(0, str(RAIZ / "src"))
 from pymongo.errors import ServerSelectionTimeoutError  # noqa: E402
 
 from db import COLECCIONES, base, fecha_de_partes  # noqa: E402
+from consultas.q11 import crear_vista  # noqa: E402
 from grafo import GrafoPendiente, reconstruir  # noqa: E402
 
 DATOS = RAIZ / "datasets"
@@ -210,6 +211,7 @@ def _escribir(tablas: dict) -> None:
         f"{len(tablas['detalle_ventas.csv']['propios'])} propios, embebidos en ventas"
     )
     db.clientes.create_index("dni", unique=True, name="dni_unico")
+    crear_vista()
 
 
 def _convertir(fila: dict) -> dict:
