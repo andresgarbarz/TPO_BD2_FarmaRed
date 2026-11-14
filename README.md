@@ -17,7 +17,7 @@ MongoDB guarda los datos y las escrituras. Neo4j guarda el camino entre entidade
 
 El devcontainer usa Python 3.12 y Docker. Al crearse instala las dependencias y levanta los dos motores. Las URIs están en `MONGO_URI` y `NEO4J_URI`. En el Codespace apuntan a `127.0.0.1`. Fuera de él, si no están definidas, el código usa el mismo localhost.
 
-MongoDB corre como replica set `rs0` de un nodo para las transacciones de Q14/Q15. Compose lo inicializa y espera que MongoDB sea PRIMARY y Neo4j acepte Cypher; al reabrir Codespaces vuelve a levantar los motores.
+MongoDB corre como replica set `rs0` de un nodo para las transacciones de Q14/Q15. Compose lo inicializa y espera que MongoDB sea PRIMARY y Neo4j responda por HTTP; al reabrir Codespaces vuelve a levantar los motores.
 
 En Codespaces el arranque es automático. En una máquina propia, con el puerto 27017 libre:
 
