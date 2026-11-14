@@ -78,6 +78,8 @@ def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_r
         productos[item["id_producto"]] = producto
 
     pide_receta = any(productos[item["id_producto"]]["condicion_venta"] in BAJO_RECETA for item in items)
+    if id_receta is not None and not pide_receta:
+        raise Rechazo("una venta libre no admite receta")
     receta = None
     if id_receta:
         receta = db.recetas.find_one({"_id": id_receta}, session=session)
