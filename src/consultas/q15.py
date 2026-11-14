@@ -9,6 +9,8 @@ los lotes con vencimiento más próximo. Los lotes vencidos no se dispensan. Si 
 stock vigente no alcanza, o la venta no está Pendiente, no se modifica ningún lote
 ni la receta, y la venta queda como estaba. Los cambios se confirman en una
 única transacción MongoDB; el grafo se proyecta después del commit.
+La sucursal guardada en la venta debe coincidir con la actual del farmacéutico.
+Las ventas anteriores sin ese campo usan la sucursal actual al completarse.
 
 Parámetros:
     id_venta: identificador de la venta ya registrada.
@@ -105,6 +107,8 @@ def ejecutar(id_venta: str) -> dict:
             raise Rechazo(f"la venta está {venta['estado']}; solo se completa una Pendiente")
         contexto = validar_venta(venta["id_cliente"], venta["id_farmaceutico"],
                                  venta["items"], venta.get("id_receta"), db=db, session=session)
+        if venta.get("id_sucursal") not in (None, contexto["sucursal"]["_id"]):
+            raise Rechazo("el farmacéutico ya no pertenece a la sucursal registrada en la venta")
         items = descontar(contexto["sucursal"]["_id"], venta["items"], db=db, session=session)
         if contexto["receta"] is not None:
             aplicar_receta(contexto["receta"], fecha, db=db, session=session)
