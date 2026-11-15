@@ -23,11 +23,13 @@ Valor de retorno:
     describe el motivo. El id del alta lo genera el servicio.
 """
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from db import base
 from grafo import proyectar, upsert_cliente
-from reglas import Rechazo, validar_cobertura
+from ids import reservar
+from reglas import Rechazo, validar_cobertura, validar_texto
 
 
 ID = "q13"
@@ -62,16 +64,19 @@ def alta(**datos) -> dict:
         return {"ok": False, "error": f"faltan datos: {', '.join(faltan)}"}
     nro = _vacio(datos.get("nro_afiliado"))
     try:
+        for campo in ALTA:
+            validar_texto(datos[campo], campo)
         validar_cobertura(datos["obra_social"], nro)
     except Rechazo as rechazo:
         return {"ok": False, "error": rechazo.mensaje}
-    if base().clientes.find_one({"dni": str(datos["dni"])}):
+    if base().clientes.find_one({"dni": datos["dni"]}):
         return {"ok": False, "error": "ya existe un cliente con ese DNI"}
 
     documento = {campo: datos[campo] for campo in ALTA}
-    documento["dni"] = str(datos["dni"])
     documento["nro_afiliado"] = nro
     documento["activo"] = True
+    documento["_version"] = 1
+    documento["grafo_pendiente"] = True
     try:
         _insertar(documento)
     except Rechazo as rechazo:
@@ -87,6 +92,13 @@ def modificar(id_cliente: str, **datos) -> dict:
         return {"ok": False, "error": "modificar solo admite contacto y cobertura"}
     if not datos:
         return {"ok": False, "error": "no hay datos para modificar"}
+    try:
+        validar_texto(id_cliente, "id_cliente")
+        for campo, valor in datos.items():
+            if campo != "nro_afiliado":
+                validar_texto(valor, campo)
+    except Rechazo as rechazo:
+        return {"ok": False, "error": rechazo.mensaje}
     clientes = base().clientes
     actual = clientes.find_one({"_id": id_cliente})
     if actual is None:
@@ -102,19 +114,33 @@ def modificar(id_cliente: str, **datos) -> dict:
     except Rechazo as rechazo:
         return {"ok": False, "error": rechazo.mensaje}
 
-    cambios = dict(datos)
+    cambios = {**datos, "grafo_pendiente": True}
     if "nro_afiliado" in cambios:
         cambios["nro_afiliado"] = nro
-    clientes.update_one({"_id": id_cliente}, {"$set": cambios})
-    return _proyectar(clientes.find_one({"_id": id_cliente}))
+    documento = clientes.find_one_and_update(
+        {"_id": id_cliente, "obra_social": actual["obra_social"],
+         "nro_afiliado": actual.get("nro_afiliado")},
+        {"$set": cambios, "$inc": {"_version": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if documento is None:
+        return {"ok": False, "error": "la cobertura del cliente cambió; reintentá la modificación"}
+    return _proyectar(documento)
 
 
 def baja(id_cliente: str) -> dict:
+    try:
+        validar_texto(id_cliente, "id_cliente")
+    except Rechazo as rechazo:
+        return {"ok": False, "error": rechazo.mensaje}
     clientes = base().clientes
-    resultado = clientes.update_one({"_id": id_cliente}, {"$set": {"activo": False}})
-    if resultado.matched_count != 1:
+    documento = clientes.find_one_and_update(
+        {"_id": id_cliente}, {"$set": {"activo": False, "grafo_pendiente": True}, "$inc": {"_version": 1}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if documento is None:
         return {"ok": False, "error": "el cliente no existe"}
-    return _proyectar(clientes.find_one({"_id": id_cliente}))
+    return _proyectar(documento)
 
 
 def _vacio(valor):
@@ -124,31 +150,15 @@ def _vacio(valor):
 
 
 def _insertar(documento: dict) -> None:
-    clientes = base().clientes
-    for _ in range(5):
-        nuevo = _siguiente_id(clientes)
-        documento["_id"] = nuevo
-        documento["id_cliente"] = nuevo
-        try:
-            clientes.insert_one(dict(documento))
-            return
-        except DuplicateKeyError as error:
-            if "dni" in str(error):
-                raise Rechazo("ya existe un cliente con ese DNI") from error
-            continue
-    raise RuntimeError("id de cliente")
-
-
-def _siguiente_id(clientes) -> str:
-    maximo = 0
-    for doc in clientes.find({}, {"_id": 1}):
-        valor = doc["_id"]
-        if isinstance(valor, str) and valor.startswith("C"):
-            try:
-                maximo = max(maximo, int(valor[1:]))
-            except ValueError:
-                continue
-    return f"C{maximo + 1:03d}"
+    db = base()
+    nuevo = f"C{reservar(db, 'C'):03d}"
+    documento["_id"] = documento["id_cliente"] = nuevo
+    try:
+        db.clientes.insert_one(dict(documento))
+    except DuplicateKeyError as error:
+        if (error.details or {}).get("keyPattern") == {"dni": 1}:
+            raise Rechazo("ya existe un cliente con ese DNI") from error
+        raise RuntimeError("id de cliente") from error
 
 
 def _proyectar(documento: dict) -> dict:

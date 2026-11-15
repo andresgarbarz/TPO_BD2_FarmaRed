@@ -15,7 +15,15 @@ class Rechazo(Exception):
         self.mensaje = mensaje
 
 
+def validar_texto(valor, campo: str) -> None:
+    if not isinstance(valor, str) or not valor.strip():
+        raise Rechazo(f"{campo} tiene que ser un texto no vacío")
+
+
 def validar_cobertura(obra_social: str, nro_afiliado: str | None) -> None:
+    validar_texto(obra_social, "obra_social")
+    if nro_afiliado not in (None, ""):
+        validar_texto(nro_afiliado, "nro_afiliado")
     if obra_social not in OBRAS:
         raise Rechazo("la obra social no es una de las previstas")
     vacio = nro_afiliado is None or nro_afiliado == ""
@@ -25,33 +33,47 @@ def validar_cobertura(obra_social: str, nro_afiliado: str | None) -> None:
         raise Rechazo("la obra social exige número de afiliado")
 
 
-def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_receta: str | None):
-    """Revisa cliente, farmacéutico, sucursal, productos y receta. No escribe."""
+def validar_entrada_venta(id_cliente, id_farmaceutico, items, id_receta) -> None:
+    validar_texto(id_cliente, "id_cliente")
+    validar_texto(id_farmaceutico, "id_farmaceutico")
+    if id_receta is not None:
+        validar_texto(id_receta, "id_receta")
+    if not isinstance(items, list):
+        raise Rechazo("items tiene que ser una lista")
     if not items:
         raise Rechazo("la venta no tiene ítems")
+    for item in items:
+        if not isinstance(item, dict) or "id_producto" not in item or "cantidad" not in item:
+            raise Rechazo("cada ítem necesita id_producto y cantidad")
+        validar_texto(item["id_producto"], "id_producto")
+        if type(item["cantidad"]) is not int or not 0 < item["cantidad"] < 2 ** 63:
+            raise Rechazo("la cantidad tiene que ser un entero mayor a cero")
 
-    db = base()
-    cliente = db.clientes.find_one({"_id": id_cliente})
+
+def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_receta: str | None, *, db=None, session=None):
+    """Revisa cliente, farmacéutico, sucursal, productos y receta. No escribe."""
+    validar_entrada_venta(id_cliente, id_farmaceutico, items, id_receta)
+    if db is None:
+        db = base()
+    cliente = db.clientes.find_one({"_id": id_cliente}, session=session)
     if cliente is None:
         raise Rechazo("el cliente no existe")
     if not cliente["activo"]:
         raise Rechazo("el cliente no está activo")
 
-    farmaceutico = db.farmaceuticos.find_one({"_id": id_farmaceutico})
+    farmaceutico = db.farmaceuticos.find_one({"_id": id_farmaceutico}, session=session)
     if farmaceutico is None:
         raise Rechazo("el farmacéutico no existe")
     if not farmaceutico["activo"]:
         raise Rechazo("el farmacéutico no está activo")
 
-    sucursal = db.sucursales.find_one({"_id": farmaceutico["id_sucursal"]})
+    sucursal = db.sucursales.find_one({"_id": farmaceutico["id_sucursal"]}, session=session)
     if sucursal is None or sucursal["tipo"] != "Farmacia":
         raise Rechazo("el farmacéutico no pertenece a una sucursal de tipo Farmacia")
 
     productos = {}
     for item in items:
-        if item["cantidad"] <= 0:
-            raise Rechazo("la cantidad tiene que ser mayor a cero")
-        producto = db.productos.find_one({"_id": item["id_producto"]})
+        producto = db.productos.find_one({"_id": item["id_producto"]}, session=session)
         if producto is None:
             raise Rechazo(f"el producto {item['id_producto']} no existe")
         if not producto["activo"]:
@@ -59,9 +81,11 @@ def validar_venta(id_cliente: str, id_farmaceutico: str, items: list[dict], id_r
         productos[item["id_producto"]] = producto
 
     pide_receta = any(productos[item["id_producto"]]["condicion_venta"] in BAJO_RECETA for item in items)
+    if id_receta is not None and not pide_receta:
+        raise Rechazo("una venta libre no admite receta")
     receta = None
     if id_receta:
-        receta = db.recetas.find_one({"_id": id_receta})
+        receta = db.recetas.find_one({"_id": id_receta}, session=session)
         if receta is None:
             raise Rechazo("la receta no existe")
         if receta["id_cliente"] != id_cliente:
@@ -99,30 +123,16 @@ def estado_receta(receta: dict, fecha) -> dict:
     }
 
 
-def aplicar_receta(receta: dict, fecha) -> dict:
-    """Actualiza la receta si nadie la modificó desde que se leyó.
-
-    Devuelve el estado anterior para poder reponerlo.
-    """
-    anterior = {
-        "_id": receta["_id"],
-        "dispensas_realizadas": receta["dispensas_realizadas"],
-        "proxima_dispensa": receta["proxima_dispensa"],
-        "estado": receta["estado"],
-    }
-    nuevo = estado_receta(receta, fecha)
-    resultado = base().recetas.update_one(
+def aplicar_receta(receta: dict, fecha, *, db, session) -> None:
+    """Actualiza la receta dentro de la misma transacción que la venta y el stock."""
+    nuevo = {**estado_receta(receta, fecha), "grafo_pendiente": True}
+    resultado = db.recetas.update_one(
         {"_id": receta["_id"], "dispensas_realizadas": receta["dispensas_realizadas"]},
-        {"$set": nuevo},
+        {"$set": nuevo, "$inc": {"_version": 1}},
+        session=session,
     )
     if resultado.matched_count != 1:
         raise Rechazo("la receta cambió mientras se registraba la venta")
-    return anterior
-
-
-def restaurar_receta(anterior: dict) -> None:
-    campos = {clave: valor for clave, valor in anterior.items() if clave != "_id"}
-    base().recetas.update_one({"_id": anterior["_id"]}, {"$set": campos})
 
 
 def fecha_dispensa():
