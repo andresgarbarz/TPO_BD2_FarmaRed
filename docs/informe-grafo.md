@@ -1,8 +1,8 @@
 # Grafo Neo4j y consultas de la Parte A
 
-Material para el informe de la Parte A del TPO FarmaRed. Los ejemplos se tomaron
-el 2026-11-11 sobre una carga recién hecha desde los CSV de la cátedra, con
-MongoDB 8.3.11 y Neo4j 5.26.32.
+Material para el informe de la Parte A del TPO FarmaRed. Los ejemplos se
+actualizaron el 2026-11-15 sobre una carga de los CSV de la cátedra y de
+`datasets/extra/`, con MongoDB 8.3.11 y Neo4j 5.26.32.
 
 ## 1. Por qué Neo4j
 
@@ -109,34 +109,36 @@ La carga usa un marcador `_estado_grafo` para impedir lecturas mientras está in
 - **Ítems repetidos.** `upsert_venta` conserva una relación `INCLUYE` por línea
   de detalle, identificada con `id_detalle`. Si una venta repite un producto con
   precios distintos, cada línea mantiene su propio `precio_unit`.
-- **Sucursal histórica.** La carga agrega `id_sucursal` a cada venta a partir
-  del farmacéutico y q14 lo fija al registrar la venta. Q15 conserva ese valor y rechaza completar una pendiente si el farmacéutico cambió de sucursal. q02 y
-  q10 recorren `(Venta)-[:EN_SUCURSAL]->(Sucursal)`, por lo que una reasignación
-  posterior del farmacéutico no mueve ventas históricas de sucursal.
+- **Sucursal de la venta.** La carga agrega `id_sucursal` a cada venta a partir
+  del farmacéutico y q14 lo fija al registrar la venta. Q15, al completar una
+  pendiente, descuenta en la sucursal actual del farmacéutico y guarda esa
+  sucursal en la venta. q02 y q10 recorren `(Venta)-[:EN_SUCURSAL]->(Sucursal)`,
+  así que una reasignación posterior del farmacéutico no mueve las ventas ya
+  grabadas.
 - **Fechas.** `_fecha()` convierte los `datetime` de Mongo a `datetime.date`,
   que el driver envía como `date` de Neo4j.
 
-Verificación de idempotencia: se corrió `scripts/cargar.py` dos veces. Las dos
-dejaron 58 nodos y 96 relaciones:
+Verificación de idempotencia: se corrió `scripts/cargar.py` el 2026-11-15. Dejó
+118 nodos y 163 relaciones:
 
 | Nodo | Cantidad |
 |---|---:|
-| `Cliente` | 8 |
-| `Farmaceutico` | 7 |
-| `Producto` | 13 |
-| `Receta` | 9 |
-| `Sucursal` | 5 |
-| `Venta` | 16 |
+| `Cliente` | 18 |
+| `Farmaceutico` | 17 |
+| `Producto` | 23 |
+| `Receta` | 19 |
+| `Sucursal` | 15 |
+| `Venta` | 26 |
 
 | Relación | Cantidad |
 |---|---:|
-| `ATENDIO` | 16 |
-| `CON_RECETA` | 10 |
-| `EN_SUCURSAL` | 16 |
-| `INCLUYE` | 22 |
-| `PRESCRIPTA_A` | 9 |
-| `REALIZO` | 16 |
-| `TRABAJA_EN` | 7 |
+| `ATENDIO` | 26 |
+| `CON_RECETA` | 16 |
+| `EN_SUCURSAL` | 26 |
+| `INCLUYE` | 33 |
+| `PRESCRIPTA_A` | 19 |
+| `REALIZO` | 26 |
+| `TRABAJA_EN` | 17 |
 
 ## 4. Consultas
 
@@ -165,6 +167,8 @@ ORDER BY v.fecha, v.id
 |---|---|---:|---|---|---|
 | `V012` | 2026-10-11 | 9200 | Natalia Giménez | MN-18289 | Farmacia Rosario Centro |
 | `V011` | 2026-10-12 | 4800 | Matías Sandoval | MN-18340 | Farmacia Nueva Córdoba |
+| `V021` | 2026-11-12 | 4800 | Leandro Paredes | MN-19011 | Farmacia Centro |
+| `V025` | 2026-11-13 | 3100 | Leandro Paredes | MN-19011 | Farmacia Centro |
 
 ### q03. Historial de un cliente
 
@@ -234,3 +238,6 @@ ORDER BY c.apellido, c.nombre
 
 `C004` aparece por la venta `V001`, registrada por `F004`, que está inactivo.
 Para `S005` (Droguería Central) devuelve `[]`, porque `F007` no tiene ventas.
+Para `S006` (Farmacia Centro) devuelve, en el orden de la consulta, `C015`
+Rodrigo De Paul, `C018` Ángel Di María, `C010` Emiliano Martínez, `C014` Lautaro
+Martínez, `C017` Nicolás Otamendi, `C016` Cristian Romero y `C011` Julián Álvarez.
