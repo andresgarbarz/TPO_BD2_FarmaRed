@@ -55,6 +55,7 @@ duplicados, ítems repetidos con precios distintos, referencias inválidas,
 proyección de Q13/Q14/Q15, consumo FEFO y rechazo sin cambios por falta de stock.
 Requieren una instancia descartable indicada por `FARMARED_TEST_NEO4J_URI`.
 
-Quedan los diez registros adicionales por colección/tabla, el diagrama de
-colecciones y el informe PDF integrado. Los casos temporales de prueba no
-reemplazan los registros propios exigidos. [P18, pp. 1, 6–7]
+Los registros propios están en `datasets/extra/`: al menos diez por colección,
+con fechas recientes, stock bajo, lotes por vencer o vencidos, recetas vencidas,
+clientes sin compras y ventas pendientes. Quedan el diagrama de colecciones y
+el informe PDF integrado. [P18, pp. 1, 6–7]

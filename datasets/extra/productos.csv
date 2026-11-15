@@ -1,0 +1,11 @@
+id_producto,nombre,principio_activo,categoria,presentacion,condicion_venta,precio_unit,id_proveedor,activo
+PRD014,Ibuprofeno suspensión 100ml,Ibuprofeno,Antiinflamatorio,Frasco 100 ml,Venta libre,3100,PRV006,True
+PRD015,Amoxicilina 250mg x16,Amoxicilina,Antibiótico,Comprimidos x16,Bajo receta,6400,PRV007,True
+PRD016,Losartán 100mg x30,Losartán,Antihipertensivo,Comprimidos x30,Bajo receta,7100,PRV006,True
+PRD017,Sales de rehidratación x10,Electrolitos,Rehidratación,Sobres x10,Venta libre,1900,PRV008,True
+PRD018,Clonazepam 0.5mg x30,Clonazepam,Ansiolítico,Comprimidos x30,Bajo receta archivada,8600,PRV010,True
+PRD019,Vitamina C 1g x10,Ácido ascórbico,Suplemento,Comprimidos efervescentes,Venta libre,2500,PRV009,True
+PRD020,Enalapril 10mg x30,Enalapril,Antihipertensivo,Comprimidos x30,Bajo receta,4300,PRV011,True
+PRD021,Jarabe para la tos 120ml,Dextrometorfano,Antitusivo,Jarabe 120 ml,Venta libre,2700,PRV012,True
+PRD022,Diclofenac gel 50g,Diclofenac,Antiinflamatorio,Gel 50 g,Venta libre,3200,PRV015,True
+PRD023,Crema dermatológica 30g,Óxido de zinc,Dermatológico,Crema 30 g,Venta libre,1500,PRV006,False

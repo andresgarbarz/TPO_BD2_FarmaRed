@@ -1,0 +1,11 @@
+id_cliente,nombre,apellido,dni,email,telefono,ciudad,provincia,obra_social,nro_afiliado,activo
+C009,Lionel,Messi,42000009,lionel.m@gmail.com,1142000009,Rosario,Santa Fe,Sin cobertura,,True
+C010,Emiliano,Martínez,42000010,emiliano.m@gmail.com,3414200010,Rosario,Santa Fe,OSDE,OS-420010,True
+C011,Julián,Álvarez,42000011,julian.a@gmail.com,3414200011,Rosario,Santa Fe,Swiss Medical,SM-420011,True
+C012,Enzo,Fernández,42000012,enzo.f@gmail.com,3514200012,Córdoba,Córdoba,PAMI,PA-420012,True
+C013,Alexis,Mac Allister,42000013,alexis.m@gmail.com,1142000013,Buenos Aires,Buenos Aires,IOMA,IO-420013,False
+C014,Lautaro,Martínez,42000014,lautaro.m@gmail.com,3414200014,Rosario,Santa Fe,Galeno,GA-420014,True
+C015,Rodrigo,De Paul,42000015,rodrigo.d@gmail.com,3414200015,Rosario,Santa Fe,Sin cobertura,,True
+C016,Cristian,Romero,42000016,cristian.r@gmail.com,1142000016,La Plata,Buenos Aires,OSDE,OS-420016,True
+C017,Nicolás,Otamendi,42000017,nicolas.o@gmail.com,3514200017,Córdoba,Córdoba,PAMI,PA-420017,True
+C018,Ángel,Di María,42000018,angel.d@gmail.com,3414200018,Rosario,Santa Fe,Swiss Medical,SM-420018,True

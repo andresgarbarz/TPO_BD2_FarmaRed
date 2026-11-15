@@ -1,0 +1,11 @@
+id_receta,id_cliente,medico,matricula_medico,fecha_emision,tipo,dispensas_autorizadas,dispensas_realizadas,proxima_dispensa,estado
+RC010,C011,Dr. Germán Pezzella,MP-61010,2026-11-01,Simple,1,1,,Completada
+RC011,C011,Dr. Germán Pezzella,MP-61010,2026-10-20,Simple,1,1,,Completada
+RC012,C012,Dr. Juan Foyth,MP-61012,2026-02-10,Simple,1,0,,Vencida
+RC013,C017,Dr. Franco Armani,MP-61013,2026-09-01,Tratamiento prolongado,3,1,2026-11-01,Vigente
+RC014,C018,Dr. Germán Pezzella,MP-61010,2026-11-01,Tratamiento prolongado,3,1,2026-12-01,Vigente
+RC015,C014,Dr. Juan Foyth,MP-61012,2026-11-05,Simple,1,0,,Vigente
+RC016,C015,Dr. Franco Armani,MP-61013,2026-08-15,Archivada,1,0,,Vigente
+RC017,C010,Dr. Guido Rodríguez,MP-45210,2024-06-15,Simple,1,1,,Completada
+RC018,C016,Dr. Nicolás González,MP-36420,2026-01-10,Simple,1,0,,Vencida
+RC019,C018,Dr. Germán Pezzella,MP-61010,2026-11-10,Simple,1,0,,Vigente

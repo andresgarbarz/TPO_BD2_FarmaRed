@@ -1,0 +1,11 @@
+id_proveedor,razon_social,cuit,tipo,ciudad,provincia,telefono,activo
+PRV006,Laboratorios del Litoral S.A.,30-72000006-1,Laboratorio,Santa Fe,Santa Fe,3424306606,True
+PRV007,Nortefarma S.A.,30-72000007-2,Laboratorio,Córdoba,Córdoba,3514307707,True
+PRV008,Distribuidora Pampeana S.R.L.,30-72000008-3,Droguería,Bahía Blanca,Buenos Aires,2914308808,True
+PRV009,Laboratorios Austral S.A.,30-72000009-4,Laboratorio,Mar del Plata,Buenos Aires,2234309909,True
+PRV010,Surmedic Droguería S.A.,30-72000010-5,Droguería,Quilmes,Buenos Aires,1142310010,True
+PRV011,Andes Pharma S.A.,30-72000011-6,Laboratorio,Rosario,Santa Fe,3414311111,True
+PRV012,Centro Medicamentos S.R.L.,30-72000012-7,Droguería,Córdoba,Córdoba,3514312121,True
+PRV013,Río Farma S.A.,30-72000013-8,Laboratorio,Santa Fe,Santa Fe,3424313131,True
+PRV014,Distribuidora Atlántica S.A.,30-72000014-9,Droguería,La Plata,Buenos Aires,2214314141,True
+PRV015,Laboratorios Inactivos S.A.,30-72000015-0,Laboratorio,Buenos Aires,Buenos Aires,1142315151,False

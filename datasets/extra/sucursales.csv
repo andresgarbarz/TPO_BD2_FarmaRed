@@ -1,0 +1,11 @@
+id_sucursal,nombre,tipo,direccion,ciudad,provincia,telefono,activo
+S006,Farmacia Centro,Farmacia,San Martín 850,Rosario,Santa Fe,3414806006,True
+S007,Farmacia Cerrada,Farmacia,Lavalle 120,Buenos Aires,Buenos Aires,1148007007,False
+S008,Droguería Norte,Droguería,Panamericana km 28,Pilar,Buenos Aires,1148008008,True
+S009,Farmacia Pilar,Farmacia,Av. Caamaño 410,Pilar,Buenos Aires,1148009009,True
+S010,Farmacia La Plata,Farmacia,Calle 7 920,La Plata,Buenos Aires,2214801010,True
+S011,Farmacia Córdoba Jardín,Farmacia,Av. Colón 1800,Córdoba,Córdoba,3514801111,True
+S012,Farmacia Fisherton,Farmacia,Av. Circunvalación 210,Rosario,Santa Fe,3414801212,True
+S013,Farmacia Quilmes,Farmacia,Rivadavia 640,Quilmes,Buenos Aires,1148013013,True
+S014,Farmacia Villa Allende,Farmacia,Av. Río Dulce 75,Villa Allende,Córdoba,3514801414,True
+S015,Farmacia Puerto Norte,Farmacia,Av. Carballo 1550,Rosario,Santa Fe,3414801515,True

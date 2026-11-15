@@ -93,7 +93,7 @@ Q13/Q14/Q15 rechazan identificadores de otros tipos, ítems incompletos y cantid
 
 Eso lista las quince consultas. Las que reciben parámetros son q03, q10, q13, q14 y q15. Q14 y Q15 confirman stock, receta, IDs y venta en una única transacción MongoDB; los rechazos y errores abortan los cambios y los conflictos transitorios reintentan la transacción completa. La proyección Neo4j se ejecuta después del commit.
 
-Están implementadas Q01–Q15 y la proyección del grafo. Q02, Q03 y Q10 usan Neo4j; las demás usan MongoDB. Quedan los registros adicionales y la consolidación del informe PDF.
+Están implementadas Q01–Q15 y la proyección del grafo. Q02, Q03 y Q10 usan Neo4j; las demás usan MongoDB. Los registros propios están en `datasets/extra/`. Queda la consolidación del informe PDF.
 
 Las seis lecturas devuelven una lista de documentos, sin argumentos. Después de cargar los datos, desde `src/`:
 
@@ -106,7 +106,7 @@ python3 -c "from consultas.q09 import ejecutar; print(ejecutar())"
 python3 -c "from consultas.q11 import ejecutar; print(ejecutar())"
 ```
 
-Q05 cuenta 60 días incluyendo hoy: desde `hoy() - 59 días` inclusive hasta mañana exclusivo, con la fecha de Argentina. Q11 usa el año y mes de `hoy()`. Con los CSV provistos, sin extras, noviembre de 2026 no tiene ingresos: Q11 devuelve `[]`. Los ejemplos, retornos y decisiones están en [docs/informe-consultas-lectura.md](docs/informe-consultas-lectura.md).
+Q05 cuenta 60 días incluyendo hoy: desde `hoy() - 59 días` inclusive hasta mañana exclusivo, con la fecha de Argentina. Q11 usa el año y mes de `hoy()`. Con los CSV de la cátedra solos, noviembre de 2026 no tiene ingresos. Los registros propios agregan ventas Completada de ese mes: si hoy cae en noviembre de 2026, Q11 incluye a F008. Los ejemplos, retornos y decisiones están en [docs/informe-consultas-lectura.md](docs/informe-consultas-lectura.md).
 
 ### Pruebas de las consultas
 
@@ -143,7 +143,7 @@ Sus decisiones y ejemplos están en [docs/informe-consultas-restantes.md](docs/i
 La 13, la 14 y la 15 se ejecutan así, con el directorio actual en `src/`:
 
 ```bash
-python3 -c "from consultas.q13 import ejecutar; print(ejecutar('baja', id_cliente='C009'))"
+python3 -c "from consultas.q13 import ejecutar; print(ejecutar('baja', id_cliente='C019'))"
 python3 -c "from consultas.q14 import ejecutar; print(ejecutar('C006', 'F001', [{'id_producto': 'PRD003', 'cantidad': 50}], 'Obra social', 'RC003'))"
 python3 -c "from consultas.q15 import ejecutar; print(ejecutar('V011'))"
 ```
@@ -156,7 +156,7 @@ python3 -c "from consultas.q03 import ejecutar; print(ejecutar('C006'))"
 python3 -c "from consultas.q10 import ejecutar; print(ejecutar('S002'))"
 ```
 
-La 14 no recibe la fecha: usa el día de hoy en Argentina. La 15 recibe el id de una venta Pendiente. El alta de la 13 y la venta de la 14 generan el siguiente id (`C009`, `V017`, `D023`).
+La 14 no recibe la fecha: usa el día de hoy en Argentina. La 15 recibe el id de una venta Pendiente. El alta de la 13 y la venta de la 14 generan el siguiente id después de los registros propios (`C019`, `V027`, `D034`).
 
 El antes y el después de los casos de esta parte, y las decisiones de consistencia, están en [docs/informe-entorno-y-escrituras.md](docs/informe-entorno-y-escrituras.md).
 

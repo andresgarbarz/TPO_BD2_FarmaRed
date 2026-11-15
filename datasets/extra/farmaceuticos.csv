@@ -1,0 +1,11 @@
+id_farmaceutico,nombre,apellido,matricula,cargo,id_sucursal,activo
+F008,Nahuel,Molina,MN-19008,Farmacéutico,S006,True
+F009,Marcos,Acuña,MN-19009,Farmacéutico,S006,True
+F010,Nicolás,Tagliafico,MN-19010,Director Técnico,S007,False
+F011,Leandro,Paredes,MN-19011,Director Técnico,S006,True
+F012,Giovani,Lo Celso,MN-19012,Farmacéutico,S009,True
+F013,Exequiel,Palacios,MN-19013,Farmacéutico,S010,True
+F014,Paulo,Dybala,MN-19014,Director Técnico,S011,True
+F015,Alejandro,Garnacho,MN-19015,Farmacéutico,S012,True
+F016,Lisandro,Martínez,MN-19016,Farmacéutico,S013,True
+F017,Gonzalo,Montiel,MN-19017,Director Técnico,S008,True
