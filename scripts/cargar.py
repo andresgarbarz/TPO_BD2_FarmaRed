@@ -199,8 +199,10 @@ def _validar(tablas: dict) -> None:
     for fila in tablas["detalle_ventas.csv"]["catedra"] + tablas["detalle_ventas.csv"]["propios"]:
         sumas[fila["id_venta"]] = sumas.get(fila["id_venta"], 0) + int(fila["cantidad"]) * int(fila["precio_unit"])
     for fila in tablas["ventas.csv"]["catedra"] + tablas["ventas.csv"]["propios"]:
+        if fila["id_venta"] not in sumas:
+            raise CargaInvalida(f"ventas {fila['id_venta']}: la venta no tiene ítems")
         total = int(fila["total"])
-        suma = sumas.get(fila["id_venta"], 0)
+        suma = sumas[fila["id_venta"]]
         if total != suma:
             raise CargaInvalida(
                 f"ventas {fila['id_venta']}: el total {total} no coincide con la suma de los ítems {suma}"

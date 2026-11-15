@@ -241,6 +241,22 @@ class ConsultasMongo(unittest.TestCase):
             with self.subTest(fecha=fecha), patch.object(q11, "hoy", return_value=fecha):
                 self.assertEqual([f["ingresos_totales"] for f in q11.ejecutar()], [esperado])
 
+    def test_venta_sin_items_se_rechaza(self):
+        tablas = {nombre: {"catedra": [dict(fila) for fila in partes["catedra"]],
+                           "propios": []}
+                  for nombre, partes in self.tablas.items()}
+        venta = tablas["ventas.csv"]["catedra"][0]["id_venta"]
+        tablas["detalle_ventas.csv"]["catedra"] = [
+            fila for fila in tablas["detalle_ventas.csv"]["catedra"]
+            if fila["id_venta"] != venta
+        ]
+        for fila in tablas["ventas.csv"]["catedra"]:
+            if fila["id_venta"] == venta:
+                fila["total"] = "0"
+        with self.assertRaises(cargar.CargaInvalida) as fallo:
+            cargar._validar(tablas)
+        self.assertIn("no tiene ítems", str(fallo.exception))
+
     def test_carga_y_vista_repetibles(self):
         self.cargar()
         self.assertEqual({nombre: self.db[nombre].count_documents({}) for nombre in db.COLECCIONES},
