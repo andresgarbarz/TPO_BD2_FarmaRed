@@ -19,7 +19,7 @@ El devcontainer usa Python 3.12 y Docker. Al crearse instala las dependencias y 
 
 MongoDB corre como replica set `rs0` de un nodo para las transacciones de Q14/Q15. Compose lo inicializa automáticamente; `docker compose up -d --wait` espera a que MongoDB sea PRIMARY.
 
-En Codespaces el arranque es automático. En una máquina propia, con el puerto 27017 libre:
+En Codespaces el devcontainer instala las dependencias, levanta los motores y verifica los CSV. Los datos no quedan cargados: después hay que correr `python3 scripts/cargar.py`. En una máquina propia, con el puerto 27017 libre:
 
 ```bash
 docker compose up -d --wait
@@ -93,7 +93,7 @@ Q13/Q14/Q15 rechazan identificadores de otros tipos, ítems incompletos y cantid
 
 Eso lista las quince consultas. Las que reciben parámetros son q03, q10, q13, q14 y q15. Q14 y Q15 confirman stock, receta, IDs y venta en una única transacción MongoDB; los rechazos y errores abortan los cambios y los conflictos transitorios reintentan la transacción completa. La proyección Neo4j se ejecuta después del commit.
 
-Están implementadas Q01–Q15 y la proyección del grafo. Q02, Q03 y Q10 usan Neo4j; las demás usan MongoDB. Los registros propios están en `datasets/extra/`. Queda la consolidación del informe PDF.
+Están implementadas Q01–Q15 y la proyección del grafo. Q02, Q03 y Q10 usan Neo4j; las demás usan MongoDB. Los registros propios están en `datasets/extra/`. El informe está en `docs/informe.pdf`.
 
 Las seis lecturas devuelven una lista de documentos, sin argumentos. Después de cargar los datos, desde `src/`:
 
