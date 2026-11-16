@@ -52,7 +52,7 @@ La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de
 
 ### Colecciones
 
-`_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay índices únicos sobre `clientes.dni` y `farmaceuticos.matricula`. Los IDs C/V/D se reservan con contadores atómicos; la carga los inicializa desde los CSV. Al instalar esta versión se debe ejecutar el cargador; no hay migración automática de bases anteriores.
+`_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay índices únicos sobre `clientes.dni` y `farmaceuticos.matricula`, e índices compuestos sobre `ventas` (`id_cliente, fecha` e `id_farmaceutico, fecha`) y `stock_lotes` (`id_producto, id_sucursal, vencimiento, _id`, para FEFO). Los IDs C/V/D se reservan con contadores atómicos; la carga los inicializa desde los CSV. Al instalar esta versión se debe ejecutar el cargador; no hay migración automática de bases anteriores.
 
 | Colección | Origen |
 |---|---|

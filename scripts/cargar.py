@@ -255,6 +255,10 @@ def _escribir(tablas: dict) -> None:
           f"{len(tablas['detalle_ventas.csv']['propios'])} propios, embebidos en ventas")
     db.clientes.create_index("dni", unique=True, name="dni_unico")
     db.farmaceuticos.create_index("matricula", unique=True, name="matricula_unica")
+    db.ventas.create_index([("id_cliente", 1), ("fecha", 1)], name="ventas_cliente_fecha")
+    db.ventas.create_index([("id_farmaceutico", 1), ("fecha", 1)], name="ventas_farmaceutico_fecha")
+    db.stock_lotes.create_index(
+        [("id_producto", 1), ("id_sucursal", 1), ("vencimiento", 1), ("_id", 1)], name="lotes_fefo")
     iniciar(db, secuencias)
     crear_vista()
     db["_estado_grafo"].update_one(
