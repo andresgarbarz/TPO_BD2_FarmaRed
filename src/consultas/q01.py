@@ -4,7 +4,7 @@ Tipo: lectura
 Sin parámetros de entrada.
 Motor: MongoDB.
 Retorna productos ordenados por id, con el proveedor completo en `proveedor`.
-Solo se filtra la actividad del producto. [P18, p. 6; T14, pp. 21–24]
+Solo se filtra la actividad del producto.
 """
 
 from db import base

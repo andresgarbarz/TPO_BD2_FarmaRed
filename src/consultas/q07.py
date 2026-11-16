@@ -4,7 +4,7 @@ Tipo: agregacion
 Sin parámetros de entrada.
 Motor: MongoDB.
 Retorna id_producto, nombre y unidades_vendidas. Ordena por unidades
-descendentes y desempata por id ascendente. [P18, p. 6; P11A, pp. 2–3]
+descendentes y desempata por id ascendente.
 """
 
 from db import base

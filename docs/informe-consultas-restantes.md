@@ -2,14 +2,14 @@
 
 Revisión: 15 de noviembre de 2026. MongoDB 8.3.11, los nueve CSV de la cátedra
 y `datasets/extra/`. Las tres funciones no reciben argumentos y devuelven
-`list[dict]`. La consigna está en [P18, p. 6]. `hoy()` ese día fue 2026-11-15.
+`list[dict]`. `hoy()` ese día fue 2026-11-15.
 
 ## Q04: clientes con más de una receta
 
 Agrupa `recetas` por `id_cliente`, cuenta documentos y conserva cantidades
 mayores que uno. Resuelve el cliente con `$lookup` contra `clientes._id` y
 devuelve id, nombre, apellido, DNI y cantidad. No filtra estados de recetas ni
-actividad del cliente: la consigna dice recetas registradas. [P18, p. 6]
+actividad del cliente: la consigna dice recetas registradas.
 
 Resultado: `C001: 2`, `C002: 2`, `C006: 2`, `C011: 2` (Julián Álvarez) y `C018: 2` (Ángel Di María).
 
@@ -18,7 +18,7 @@ Resultado: `C001: 2`, `C002: 2`, `C006: 2`, `C011: 2` (Julián Álvarez) y `C018
 Filtra recetas de `Tratamiento prolongado`, estado `Vigente`, con
 `proxima_dispensa` de tipo fecha y estrictamente anterior a `hoy()`. Resuelve
 todos los datos del cliente con `$lookup`. No filtra clientes inactivos.
-Las fechas nulas, ausentes, de hoy y futuras quedan fuera. [P18, p. 6]
+Las fechas nulas, ausentes, de hoy y futuras quedan fuera.
 
 El 2026-11-15 devuelve `RC002` (cliente `C003`, próxima dispensa 2026-09-15),
 `RC003` (`C006`, 2026-10-01), `RC004` (`C006`, 2026-10-20) y `RC013` (`C017`,
@@ -31,7 +31,7 @@ Parte de todos los clientes, busca como máximo una venta reciente por cliente y
 conserva aquellos sin coincidencias. Incluye clientes inactivos y clientes que
 nunca compraron. Considera ventas de cualquier estado, incluidas las anuladas:
 Q12 no las excluye, a diferencia de otras consultas. Usa `ventas.fecha`, igual
-que Q05 y Q11. [P18, p. 6]
+que Q05 y Q11.
 
 **Decisión del proyecto:** “último año” se interpreta como 365 días incluyendo
 hoy: desde `hoy() - 364 días` inclusivo hasta mañana exclusivo. No es una
@@ -66,4 +66,4 @@ con registros propios, deja 118 nodos y 163 relaciones.
 Los registros propios están en `datasets/extra/`: al menos diez por colección,
 con fechas recientes, stock bajo, lotes por vencer o vencidos, recetas vencidas,
 clientes sin compras y ventas pendientes. Quedan el diagrama de colecciones y
-el informe PDF integrado. [P18, pp. 1, 6–7]
+el informe PDF integrado.

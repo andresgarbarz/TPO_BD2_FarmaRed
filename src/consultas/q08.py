@@ -5,7 +5,7 @@ Sin parámetros de entrada.
 Motor: MongoDB.
 Retorna lotes ordenados por id, con documentos `producto`, `sucursal` y
 `proveedor`. Incluye vencidos, stock cero y entidades inactivas.
-[P18, p. 6; T14, pp. 21–24]
+
 """
 
 from db import base

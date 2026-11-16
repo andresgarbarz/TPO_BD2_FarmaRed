@@ -6,7 +6,7 @@ Motor: MongoDB.
 Retorna id_farmaceutico, nombre, apellido, matricula, anio, mes e
 ingresos_totales, ordenados por id. No filtra farmacéuticos inactivos.
 La carga prepara la vista mensual; ejecutar selecciona el mes de hoy().
-[P18, pp. 5–6; T13, pp. 50–52]
+
 """
 
 from db import base, hoy

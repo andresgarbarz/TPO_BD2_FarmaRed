@@ -4,7 +4,7 @@ Tipo: lectura
 Sin parámetros de entrada.
 Motor: MongoDB.
 Retorna una lista de ventas completas, ordenadas por id. Incluye pendientes.
-[P18, p. 6]
+
 """
 
 from db import base

@@ -14,7 +14,7 @@ Las fechas se guardan como `Date` armados con año, mes y día. `_id` es el id d
 
 ## Consulta 13
 
-ABM de clientes en MongoDB [P18, p. 6]. `ejecutar(operacion, **datos)` llama a `alta`, `modificar(id_cliente, ...)` o `baja(id_cliente)`. El alta genera el id siguiente (`C019`). Modificar solo admite email, teléfono, ciudad, provincia, obra social y número de afiliado. Tratar ciudad y provincia como contacto es un supuesto: la consigna las llama domicilio. La baja pone `activo` en false y no borra el documento [P18, p. 5]. Después se llama a `upsert_cliente`.
+ABM de clientes en MongoDB. `ejecutar(operacion, **datos)` llama a `alta`, `modificar(id_cliente, ...)` o `baja(id_cliente)`. El alta genera el id siguiente (`C019`). Modificar solo admite email, teléfono, ciudad, provincia, obra social y número de afiliado. Tratar ciudad y provincia como contacto es un supuesto: la consigna las llama domicilio. La baja pone `activo` en false y no borra el documento. Después se llama a `upsert_cliente`.
 
 Antes: 18 clientes. `C008` (Hugo Mansilla) tiene DNI `25678901` y `activo` en false. `C009` ya existe: es Lionel Messi, un registro propio.
 
@@ -30,7 +30,7 @@ La cobertura válida es OSDE, Swiss Medical, PAMI, IOMA, Galeno o Sin cobertura.
 
 ## Consulta 14
 
-Registro de una venta nueva Completada en MongoDB [P18, p. 6]. El llamador manda `id_producto` y `cantidad`. El servicio copia `precio_unit` del producto y el total es la suma. No recibe la fecha: usa `hoy()`.
+Registro de una venta nueva Completada en MongoDB. El llamador manda `id_producto` y `cantidad`. El servicio copia `precio_unit` del producto y el total es la suma. No recibe la fecha: usa `hoy()`.
 
 Antes, con la carga recién hecha: 26 ventas; `L005` en `S001` con 40 unidades y vencimiento 2026-11-30; `L015` en `S001` con 100 unidades y vencimiento 2027-06-30; `RC003` vigente, 2 de 3, próxima 2026-10-01; `RC004` vigente, 1 de 3, próxima 2026-10-20. El precio de `PRD003` es 9800. Las filas exitosas se ejecutaron en ese orden, sobre el estado que dejó la anterior.
 
@@ -43,7 +43,7 @@ Antes, con la carga recién hecha: 26 ventas; `L005` en `S001` con 40 unidades y
 
 ## Consulta 15
 
-Completa una venta que ya está Pendiente [P18, p. 6]. Descuenta por FEFO en la sucursal del farmacéutico, actualiza la receta y, solo si todo alcanzó, la pasa a Completada. `fecha` pasa a ser el día de la entrega, que es cuando computa ingresos. La reserva queda en `fecha_registro`. Los precios no se recalculan.
+Completa una venta que ya está Pendiente. Descuenta por FEFO en la sucursal del farmacéutico, actualiza la receta y, solo si todo alcanzó, la pasa a Completada. `fecha` pasa a ser el día de la entrega, que es cuando computa ingresos. La reserva queda en `fecha_registro`. Los precios no se recalculan.
 
 Antes: `V011` Pendiente, fecha 2026-10-12, una unidad de `PRD007` a 4800, receta `RC006`. `L014` en `S004` tiene 45 unidades. `RC006` es simple, vigente, 0 de 1. `V012` está Pendiente y `S003` no tiene lotes de sus productos. `V003` ya está Completada.
 
@@ -57,13 +57,13 @@ En una venta Completada, `fecha` es el día que usan las consultas 3, 5, 11 y 12
 
 ## Consistencia de la 14 y la 15
 
-Las dos tienen que quedar integradas: si el descuento falla, no pueden quedar una venta ni una receta modificadas [P18, p. 7]. Comparten `descontar(id_sucursal, items)`.
+Las dos tienen que quedar integradas: si el descuento falla, no pueden quedar una venta ni una receta modificadas. Comparten `descontar(id_sucursal, items)`.
 
 El plan FEFO lee los lotes con `vencimiento` mayor o igual a `hoy()`, ordenados por `{vencimiento: 1, _id: 1}`. El día de vencimiento todavía se vende. El `sort` de MongoDB no es estable, y `_id` es el id del lote, así que dos lotes que vencen el mismo día salen siempre en el mismo orden. Si dos ítems piden el mismo producto, el plan descuenta en memoria lo ya asignado para no usar dos veces las mismas unidades.
 
 La implementación posterior a la auditoría confirma lotes, receta, contadores y venta en una transacción MongoDB. El entorno inicia automáticamente un replica set `rs0` de un nodo. Un rechazo o error de escritura aborta todos los cambios; los conflictos transitorios reintentan la transacción. La proyección Neo4j se realiza después del commit. Ya no se restauran snapshots de recetas ni se reponen lotes por compensación.
 
-Q15 lee y completa la venta dentro de la transacción, de modo que dos llamadas simultáneas no consumen dos dispensas. Descuenta en la sucursal actual del farmacéutico y la guarda en la venta completada. Q14 rechaza una receta en ventas exclusivamente libres y valida cantidades enteras positivas antes de escribir. Estas decisiones del proyecto mantienen las reglas de venta, stock e integración. [P18, pp. 4–7]
+Q15 lee y completa la venta dentro de la transacción, de modo que dos llamadas simultáneas no consumen dos dispensas. Descuenta en la sucursal actual del farmacéutico y la guarda en la venta completada. Q14 rechaza una receta en ventas exclusivamente libres y valida cantidades enteras positivas antes de escribir. Estas decisiones del proyecto mantienen las reglas de venta, stock e integración.
 
 Los correlativos C/V/D usan contadores atómicos, inicializados por la carga. No se migran bases anteriores automáticamente. Q13 modifica la cobertura sólo si sigue siendo la que validó. DNI y matrícula se protegen con índices únicos.
 

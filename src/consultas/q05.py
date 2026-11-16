@@ -6,7 +6,7 @@ Motor: MongoDB.
 Retorna id_farmaceutico, nombre, apellido, matricula y cantidad_ventas,
 ordenados por id. Incluye pendientes y farmacéuticos sin ventas.
 Convención: 60 días incluyendo hoy, desde hoy() - 59 días hasta mañana exclusivo.
-[P18, p. 6; T14, p. 23; T15, p. 33]
+
 """
 
 from datetime import timedelta
