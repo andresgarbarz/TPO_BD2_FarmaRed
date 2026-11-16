@@ -1,6 +1,6 @@
 # TPO FarmaRed — Bases de Datos II
 
-Trabajo práctico obligatorio, 2.º cuatrimestre 2026. Red de farmacias con droguería propia. La entrega de la cátedra es este repositorio más un informe PDF. La fecha la define la cátedra.
+Trabajo práctico obligatorio, 2.º cuatrimestre 2026. Red de farmacias con droguería propia. La entrega de la cátedra es este repositorio. El informe está en `docs/informe.pdf`. La fecha la define la cátedra.
 
 ## Integrantes
 
@@ -185,7 +185,7 @@ Hay que sumar al menos 10 registros propios por colección, con casos borde. La 
 compose.yaml       MongoDB y Neo4j
 datasets/          CSV provistos
 datasets/extra/    registros propios, si existen
-docs/              material de esta parte para el informe
+docs/              informe.pdf y las notas de cada parte
 scripts/           verificación y carga
 src/db.py          conexión y hoy()
 src/grafo.py       proyección a Neo4j y Cypher de q02, q03 y q10
