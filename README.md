@@ -1,6 +1,6 @@
 # TPO FarmaRed — Bases de Datos II
 
-Trabajo práctico obligatorio, 2.º cuatrimestre 2026. Red de farmacias con droguería propia. La entrega de la cátedra es este repositorio. El informe está en `docs/informe.pdf`. La fecha la define la cátedra.
+Trabajo práctico obligatorio, 2.º cuatrimestre 2026. Red de farmacias con droguería propia. La entrega de la cátedra es este repositorio. El informe está en `docs/informe.pdf`.
 
 ## Integrantes
 
@@ -54,16 +54,16 @@ La carga también crea o actualiza la vista `ingresos_mensuales_farmaceutico` de
 
 `_id` es el id de la cátedra (`C001`, `V001`). Los demás campos conservan el nombre del CSV. Los booleanos son booleanos, los importes son enteros y las fechas son `Date` armados con año, mes y día. El proveedor del producto queda referenciado con `id_proveedor`. Hay índices únicos sobre `clientes.dni` y `farmaceuticos.matricula`, e índices compuestos sobre `ventas` (`id_cliente, fecha` e `id_farmaceutico, fecha`) y `stock_lotes` (`id_producto, id_sucursal, vencimiento, _id`, para FEFO). Los IDs C/V/D se reservan con contadores atómicos; la carga los inicializa desde los CSV. Al instalar esta versión se debe ejecutar el cargador; no hay migración automática de bases anteriores.
 
-| Colección | Origen |
-|---|---|
-| `clientes` | `clientes.csv` |
-| `sucursales` | `sucursales.csv` |
-| `farmaceuticos` | `farmaceuticos.csv` |
-| `proveedores` | `proveedores.csv` |
-| `productos` | `productos.csv` |
-| `stock_lotes` | `stock_lotes.csv` |
-| `recetas` | `recetas.csv` |
-| `ventas` | `ventas.csv` más sus ítems |
+| Colección       | Origen                     |
+| --------------- | -------------------------- |
+| `clientes`      | `clientes.csv`             |
+| `sucursales`    | `sucursales.csv`           |
+| `farmaceuticos` | `farmaceuticos.csv`        |
+| `proveedores`   | `proveedores.csv`          |
+| `productos`     | `productos.csv`            |
+| `stock_lotes`   | `stock_lotes.csv`          |
+| `recetas`       | `recetas.csv`              |
+| `ventas`        | `ventas.csv` más sus ítems |
 
 No hay colección de detalle. Cada venta tiene un arreglo `items` con `id_detalle`, `id_producto`, `cantidad` y `precio_unit`.
 
@@ -164,17 +164,17 @@ El antes y el después de los casos de esta parte, y las decisiones de consisten
 
 Están en `datasets/`, en UTF-8 y separados por coma. La referencia temporal de la consigna es el 2026-10-13. Los campos vacíos son nulos, los booleanos son `True`/`False`, las fechas son ISO y los importes son enteros en pesos.
 
-| Archivo | Filas |
-|---|---|
-| `clientes.csv` | 8 |
-| `sucursales.csv` | 5 |
-| `farmaceuticos.csv` | 7 |
-| `proveedores.csv` | 5 |
-| `productos.csv` | 13 |
-| `stock_lotes.csv` | 18 |
-| `recetas.csv` | 9 |
-| `ventas.csv` | 16 |
-| `detalle_ventas.csv` | 22 |
+| Archivo              | Filas |
+| -------------------- | ----- |
+| `clientes.csv`       | 8     |
+| `sucursales.csv`     | 5     |
+| `farmaceuticos.csv`  | 7     |
+| `proveedores.csv`    | 5     |
+| `productos.csv`      | 13    |
+| `stock_lotes.csv`    | 18    |
+| `recetas.csv`        | 9     |
+| `ventas.csv`         | 16    |
+| `detalle_ventas.csv` | 22    |
 
 Hay que sumar al menos 10 registros propios por colección, con casos borde. La carga los toma de `datasets/extra/`.
 
