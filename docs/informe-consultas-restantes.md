@@ -65,5 +65,5 @@ con registros propios, deja 118 nodos y 163 relaciones.
 
 Los registros propios están en `datasets/extra/`: al menos diez por colección,
 con fechas recientes, stock bajo, lotes por vencer o vencidos, recetas vencidas,
-clientes sin compras y ventas pendientes. Quedan el diagrama de colecciones y
-el informe PDF integrado.
+clientes sin compras y ventas pendientes. El informe, con el diagrama de
+colecciones, está en `docs/informe.pdf`.
